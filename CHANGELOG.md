@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.0.3 - 2026-05-16
+
+### Fixed
+
+- Fixed decoding of native integer-list read chunks from platform channels.
+- Hardened native read stream cancellation on Android, iOS, and macOS.
+
+### Changed
+
+- Added Android native and emulator integration test coverage in CI.
+- Raised Dart unit test line coverage above 90%.
+
 ## 0.0.2 - 2026-05-16
 
 ### Added

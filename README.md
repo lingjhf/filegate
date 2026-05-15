@@ -23,7 +23,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  filegate: ^0.0.2
+  filegate: ^0.0.3
 ```
 
 If you are using this repository directly:
