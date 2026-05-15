@@ -15,28 +15,28 @@ void main() {
   final MethodChannelFilegate desktopPlatform = MethodChannelFilegate();
   const MethodChannel channel = MethodChannel('filegate');
   final List<MethodCall> methodCalls = <MethodCall>[];
+  Object? pickResponse;
   String startReadResponse = 'stream-1';
   Object? eventPayload = Uint8List.fromList(const [1, 2, 3]);
   PlatformException? getFileSizeError;
   PlatformException? startReadError;
+  bool cancelReadThrows = false;
 
   setUp(() {
     methodCalls.clear();
+    pickResponse = [
+      {'path': '/tmp/example.txt', 'name': 'example.txt', 'kind': 'file'},
+    ];
     startReadResponse = 'stream-1';
     eventPayload = Uint8List.fromList(const [1, 2, 3]);
     getFileSizeError = null;
     startReadError = null;
+    cancelReadThrows = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
           methodCalls.add(methodCall);
           if (methodCall.method == 'pick') {
-            return [
-              {
-                'path': '/tmp/example.txt',
-                'name': 'example.txt',
-                'kind': 'file',
-              },
-            ];
+            return pickResponse;
           }
 
           if (methodCall.method == 'getFileSize') {
@@ -54,6 +54,9 @@ void main() {
           }
 
           if (methodCall.method == 'cancelRead') {
+            if (cancelReadThrows) {
+              throw PlatformException(code: 'cancel_failed');
+            }
             return null;
           }
 
@@ -93,6 +96,20 @@ void main() {
     expect(result, hasLength(1));
     expect(result!.single.name, 'example.txt');
     expect(result.single.kind, PickedEntryKind.file);
+  });
+
+  test('pick rejects invalid native entry payloads', () async {
+    pickResponse = ['unexpected'];
+
+    await expectLater(
+      platform.pick(const FilegatePickOptions()),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
+  test('getFileSize validates arguments before touching the channel', () async {
+    await expectLater(platform.getFileSize(''), throwsA(isA<ArgumentError>()));
+    expect(methodCalls.where((call) => call.method == 'getFileSize'), isEmpty);
   });
 
   test('openRead validates arguments before touching the channel', () {
@@ -198,6 +215,17 @@ void main() {
     );
   });
 
+  test('openRead accepts native list chunks', () async {
+    eventPayload = const <int>[4, 5, 6];
+
+    final session = platform.openRead('/tmp/example.txt');
+    final chunks = await session.stream.map((chunk) => chunk.toList()).toList();
+
+    expect(chunks, const [
+      <int>[4, 5, 6],
+    ]);
+  });
+
   test('getFileSize decodes native values', () async {
     expect(await platform.getFileSize('/tmp/example.txt'), 123);
   });
@@ -240,6 +268,15 @@ void main() {
     );
   });
 
+  test('cancel ignores native cancellation failures', () async {
+    cancelReadThrows = true;
+
+    final session = platform.openRead('/tmp/example.txt');
+    await session.stream.drain<void>();
+
+    await expectLater(session.cancel(), completes);
+  });
+
   test('openRead reports desktop directory paths as not_a_file', () async {
     final directory = Directory.systemTemp.createTempSync('filegate-test-');
     addTearDown(() {
@@ -258,6 +295,47 @@ void main() {
         ),
       ),
     );
+    expect(methodCalls.where((call) => call.method == 'startRead'), isEmpty);
+  });
+
+  test(
+    'openRead reads desktop file paths without native channel calls',
+    () async {
+      final directory = Directory.systemTemp.createTempSync('filegate-test-');
+      addTearDown(() {
+        directory.deleteSync(recursive: true);
+      });
+      final file = File('${directory.path}${Platform.pathSeparator}sample.bin')
+        ..writeAsBytesSync(const [1, 2, 3, 4, 5]);
+
+      final session = desktopPlatform.openRead(
+        file.path,
+        chunkSize: 2,
+        start: 1,
+      );
+      final chunks = await session.stream
+          .map((chunk) => chunk.toList())
+          .toList();
+
+      expect(chunks, const [
+        <int>[2, 3],
+        <int>[4, 5],
+      ]);
+      expect(methodCalls.where((call) => call.method == 'startRead'), isEmpty);
+    },
+  );
+
+  test('openRead returns empty desktop stream past EOF', () async {
+    final directory = Directory.systemTemp.createTempSync('filegate-test-');
+    addTearDown(() {
+      directory.deleteSync(recursive: true);
+    });
+    final file = File('${directory.path}${Platform.pathSeparator}sample.bin')
+      ..writeAsBytesSync(const [1, 2, 3]);
+
+    final session = desktopPlatform.openRead(file.path, chunkSize: 2, start: 4);
+
+    await expectLater(session.stream, emitsDone);
     expect(methodCalls.where((call) => call.method == 'startRead'), isEmpty);
   });
 

@@ -114,6 +114,8 @@ void main() {
     expect(restored.name, entry.name);
     expect(restored.kind, entry.kind);
     expect(restored.relativePath, entry.relativePath);
+    expect(restored.isFile, isTrue);
+    expect(restored.isDirectory, isFalse);
   });
 
   test('directory picked entry round-trips kind', () {
@@ -130,6 +132,19 @@ void main() {
     expect(restored.name, entry.name);
     expect(restored.kind, PickedEntryKind.directory);
     expect(restored.relativePath, entry.relativePath);
+    expect(restored.isFile, isFalse);
+    expect(restored.isDirectory, isTrue);
+  });
+
+  test('picked entry rejects invalid native payloads', () {
+    expect(
+      () => PickedEntry.fromMap(const {
+        'path': '/tmp/example.txt',
+        'name': 'example.txt',
+        'kind': 1,
+      }),
+      throwsA(isA<ArgumentError>()),
+    );
   });
 
   test('openReadWithProgress wraps chunks with cumulative progress', () async {

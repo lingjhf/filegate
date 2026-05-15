@@ -122,8 +122,8 @@ class MethodChannelFilegate extends FilegatePlatform {
                     controller.add(event.buffer.asUint8List());
                     return;
                   }
-                  if (event is List<int>) {
-                    controller.add(Uint8List.fromList(event));
+                  if (event is List && event.every((item) => item is int)) {
+                    controller.add(Uint8List.fromList(event.cast<int>()));
                     return;
                   }
 
