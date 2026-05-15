@@ -27,6 +27,10 @@ abstract class FilegatePlatform extends PlatformInterface {
     _instance = instance;
   }
 
+  Future<FilegateCapabilities> getCapabilities() {
+    throw UnimplementedError('getCapabilities() has not been implemented.');
+  }
+
   Future<List<PickedEntry>?> pick(FilegatePickOptions options) {
     throw UnimplementedError('pick() has not been implemented.');
   }

@@ -13,6 +13,10 @@ import 'src/models.dart';
 class Filegate {
   const Filegate();
 
+  Future<FilegateCapabilities> getCapabilities() {
+    return FilegatePlatform.instance.getCapabilities();
+  }
+
   Future<List<PickedEntry>?> pick(FilegatePickOptions options) {
     return FilegatePlatform.instance.pick(options);
   }

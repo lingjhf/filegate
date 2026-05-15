@@ -4,6 +4,62 @@ enum FilegateSelectionMode { filesOnly, directoriesOnly, filesAndDirectories }
 
 enum PickedEntryKind { file, directory }
 
+class FilegateCapabilities {
+  const FilegateCapabilities({
+    required this.supportsFilePicking,
+    required this.supportsDirectoryPicking,
+    required this.supportsMixedPicking,
+    required this.supportsInitialDirectory,
+    required this.supportsPersistedAccess,
+    required this.supportsNativeUriRead,
+  });
+
+  final bool supportsFilePicking;
+  final bool supportsDirectoryPicking;
+  final bool supportsMixedPicking;
+  final bool supportsInitialDirectory;
+  final bool supportsPersistedAccess;
+  final bool supportsNativeUriRead;
+
+  Map<String, Object?> toMap() {
+    return {
+      'supportsFilePicking': supportsFilePicking,
+      'supportsDirectoryPicking': supportsDirectoryPicking,
+      'supportsMixedPicking': supportsMixedPicking,
+      'supportsInitialDirectory': supportsInitialDirectory,
+      'supportsPersistedAccess': supportsPersistedAccess,
+      'supportsNativeUriRead': supportsNativeUriRead,
+    };
+  }
+
+  factory FilegateCapabilities.fromMap(Map<Object?, Object?> map) {
+    final supportsFilePicking = map['supportsFilePicking'];
+    final supportsDirectoryPicking = map['supportsDirectoryPicking'];
+    final supportsMixedPicking = map['supportsMixedPicking'];
+    final supportsInitialDirectory = map['supportsInitialDirectory'];
+    final supportsPersistedAccess = map['supportsPersistedAccess'];
+    final supportsNativeUriRead = map['supportsNativeUriRead'];
+
+    if (supportsFilePicking is! bool ||
+        supportsDirectoryPicking is! bool ||
+        supportsMixedPicking is! bool ||
+        supportsInitialDirectory is! bool ||
+        supportsPersistedAccess is! bool ||
+        supportsNativeUriRead is! bool) {
+      throw ArgumentError.value(map, 'map', 'Invalid capabilities payload');
+    }
+
+    return FilegateCapabilities(
+      supportsFilePicking: supportsFilePicking,
+      supportsDirectoryPicking: supportsDirectoryPicking,
+      supportsMixedPicking: supportsMixedPicking,
+      supportsInitialDirectory: supportsInitialDirectory,
+      supportsPersistedAccess: supportsPersistedAccess,
+      supportsNativeUriRead: supportsNativeUriRead,
+    );
+  }
+}
+
 class FilegatePickOptions {
   const FilegatePickOptions({
     this.selectionMode = FilegateSelectionMode.filesOnly,

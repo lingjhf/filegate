@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.0 - 2026-05-16
+
+### Added
+
+- Added `Filegate.getCapabilities()` and `FilegateCapabilities` to expose
+  platform support for file picking, directory picking, mixed picking, initial
+  directories, persisted access, and native URI reads.
+
 ## 0.0.4 - 2026-05-16
 
 ### Fixed

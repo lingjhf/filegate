@@ -158,6 +158,7 @@ final bytes = await filegate.readAllBytes(
 
 Methods:
 
+- `getCapabilities()`: Returns the current platform capability flags.
 - `pick(FilegatePickOptions options)`: Runs a platform picker.
 - `pickFiles(...)`: Picks one or more files.
 - `pickDirectoryFiles(...)`: Picks a directory and returns matching files.
@@ -177,6 +178,21 @@ Fields:
 - `name`: Display name.
 - `kind`: `PickedEntryKind.file` or `PickedEntryKind.directory`.
 - `relativePath`: Relative path when enumerating directory contents.
+
+### FilegateCapabilities
+
+`FilegateCapabilities` describes platform differences before showing a picker.
+Use it to decide whether to show mixed file/directory selection, initial
+directory controls, persistent access messaging, or URI-read flows.
+
+Fields:
+
+- `supportsFilePicking`
+- `supportsDirectoryPicking`
+- `supportsMixedPicking`
+- `supportsInitialDirectory`
+- `supportsPersistedAccess`
+- `supportsNativeUriRead`
 
 ## Errors
 

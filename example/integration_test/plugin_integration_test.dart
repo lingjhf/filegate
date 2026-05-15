@@ -120,6 +120,10 @@ void main() {
 
     const filegate = Filegate();
 
+    final capabilities = await filegate.getCapabilities();
+    expect(capabilities.supportsFilePicking, isTrue);
+    expect(capabilities.supportsDirectoryPicking, isTrue);
+
     expect(await filegate.getFileSize(file.path), bytes.length);
     await expectLater(
       filegate.getFileSize(directory.path),

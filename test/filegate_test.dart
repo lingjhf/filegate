@@ -15,6 +15,19 @@ class MockFilegatePlatform
   ];
   int cancelCount = 0;
   Object? getFileSizeError;
+  FilegateCapabilities capabilities = const FilegateCapabilities(
+    supportsFilePicking: true,
+    supportsDirectoryPicking: true,
+    supportsMixedPicking: false,
+    supportsInitialDirectory: true,
+    supportsPersistedAccess: true,
+    supportsNativeUriRead: true,
+  );
+
+  @override
+  Future<FilegateCapabilities> getCapabilities() {
+    return Future.value(capabilities);
+  }
 
   @override
   Future<List<PickedEntry>?> pick(FilegatePickOptions options) {
@@ -98,6 +111,61 @@ void main() {
     final size = await filegatePlugin.getFileSize('/tmp/example.txt');
 
     expect(size, 123);
+  });
+
+  test('getCapabilities delegates to the active platform', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    FilegatePlatform.instance = fakePlatform;
+
+    final capabilities = await filegatePlugin.getCapabilities();
+
+    expect(capabilities.supportsFilePicking, isTrue);
+    expect(capabilities.supportsMixedPicking, isFalse);
+    expect(capabilities.supportsNativeUriRead, isTrue);
+  });
+
+  test('capabilities round-trip map payloads', () {
+    const capabilities = FilegateCapabilities(
+      supportsFilePicking: true,
+      supportsDirectoryPicking: true,
+      supportsMixedPicking: false,
+      supportsInitialDirectory: true,
+      supportsPersistedAccess: true,
+      supportsNativeUriRead: false,
+    );
+
+    final restored = FilegateCapabilities.fromMap(capabilities.toMap());
+
+    expect(restored.supportsFilePicking, capabilities.supportsFilePicking);
+    expect(
+      restored.supportsDirectoryPicking,
+      capabilities.supportsDirectoryPicking,
+    );
+    expect(restored.supportsMixedPicking, capabilities.supportsMixedPicking);
+    expect(
+      restored.supportsInitialDirectory,
+      capabilities.supportsInitialDirectory,
+    );
+    expect(
+      restored.supportsPersistedAccess,
+      capabilities.supportsPersistedAccess,
+    );
+    expect(restored.supportsNativeUriRead, capabilities.supportsNativeUriRead);
+  });
+
+  test('capabilities reject invalid payloads', () {
+    expect(
+      () => FilegateCapabilities.fromMap(const {
+        'supportsFilePicking': true,
+        'supportsDirectoryPicking': true,
+        'supportsMixedPicking': false,
+        'supportsInitialDirectory': true,
+        'supportsPersistedAccess': true,
+        'supportsNativeUriRead': 'false',
+      }),
+      throwsA(isA<ArgumentError>()),
+    );
   });
 
   test('picked entry round-trips relativePath', () {

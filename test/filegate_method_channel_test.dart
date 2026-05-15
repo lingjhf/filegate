@@ -98,6 +98,55 @@ void main() {
     expect(result.single.kind, PickedEntryKind.file);
   });
 
+  test('capabilities describe Android SAF limits', () {
+    final capabilities = MethodChannelFilegate.capabilitiesForOperatingSystem(
+      'android',
+    );
+
+    expect(capabilities.supportsFilePicking, isTrue);
+    expect(capabilities.supportsDirectoryPicking, isTrue);
+    expect(capabilities.supportsMixedPicking, isFalse);
+    expect(capabilities.supportsPersistedAccess, isTrue);
+    expect(capabilities.supportsNativeUriRead, isTrue);
+  });
+
+  test('capabilities describe Apple mixed picker support', () {
+    final iosCapabilities =
+        MethodChannelFilegate.capabilitiesForOperatingSystem('ios');
+    final macosCapabilities =
+        MethodChannelFilegate.capabilitiesForOperatingSystem('macos');
+
+    expect(iosCapabilities.supportsMixedPicking, isTrue);
+    expect(iosCapabilities.supportsNativeUriRead, isTrue);
+    expect(macosCapabilities.supportsMixedPicking, isTrue);
+    expect(macosCapabilities.supportsNativeUriRead, isFalse);
+  });
+
+  test('capabilities describe desktop picker limits', () {
+    final windowsCapabilities =
+        MethodChannelFilegate.capabilitiesForOperatingSystem('windows');
+    final linuxCapabilities =
+        MethodChannelFilegate.capabilitiesForOperatingSystem('linux');
+
+    expect(windowsCapabilities.supportsMixedPicking, isFalse);
+    expect(windowsCapabilities.supportsPersistedAccess, isTrue);
+    expect(linuxCapabilities.supportsMixedPicking, isFalse);
+    expect(linuxCapabilities.supportsPersistedAccess, isTrue);
+  });
+
+  test('capabilities are disabled for unknown operating systems', () {
+    final capabilities = MethodChannelFilegate.capabilitiesForOperatingSystem(
+      'unknown',
+    );
+
+    expect(capabilities.supportsFilePicking, isFalse);
+    expect(capabilities.supportsDirectoryPicking, isFalse);
+    expect(capabilities.supportsMixedPicking, isFalse);
+    expect(capabilities.supportsInitialDirectory, isFalse);
+    expect(capabilities.supportsPersistedAccess, isFalse);
+    expect(capabilities.supportsNativeUriRead, isFalse);
+  });
+
   test('pick rejects invalid native entry payloads', () async {
     pickResponse = ['unexpected'];
 

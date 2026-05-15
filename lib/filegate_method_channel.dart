@@ -20,6 +20,67 @@ class MethodChannelFilegate extends FilegatePlatform {
   final methodChannel = const MethodChannel('filegate');
 
   @override
+  Future<FilegateCapabilities> getCapabilities() async {
+    return capabilitiesForOperatingSystem(Platform.operatingSystem);
+  }
+
+  @visibleForTesting
+  static FilegateCapabilities capabilitiesForOperatingSystem(
+    String operatingSystem,
+  ) {
+    return switch (operatingSystem) {
+      'android' => const FilegateCapabilities(
+        supportsFilePicking: true,
+        supportsDirectoryPicking: true,
+        supportsMixedPicking: false,
+        supportsInitialDirectory: true,
+        supportsPersistedAccess: true,
+        supportsNativeUriRead: true,
+      ),
+      'ios' => const FilegateCapabilities(
+        supportsFilePicking: true,
+        supportsDirectoryPicking: true,
+        supportsMixedPicking: true,
+        supportsInitialDirectory: true,
+        supportsPersistedAccess: false,
+        supportsNativeUriRead: true,
+      ),
+      'macos' => const FilegateCapabilities(
+        supportsFilePicking: true,
+        supportsDirectoryPicking: true,
+        supportsMixedPicking: true,
+        supportsInitialDirectory: true,
+        supportsPersistedAccess: true,
+        supportsNativeUriRead: false,
+      ),
+      'windows' => const FilegateCapabilities(
+        supportsFilePicking: true,
+        supportsDirectoryPicking: true,
+        supportsMixedPicking: false,
+        supportsInitialDirectory: true,
+        supportsPersistedAccess: true,
+        supportsNativeUriRead: false,
+      ),
+      'linux' => const FilegateCapabilities(
+        supportsFilePicking: true,
+        supportsDirectoryPicking: true,
+        supportsMixedPicking: false,
+        supportsInitialDirectory: true,
+        supportsPersistedAccess: true,
+        supportsNativeUriRead: false,
+      ),
+      _ => const FilegateCapabilities(
+        supportsFilePicking: false,
+        supportsDirectoryPicking: false,
+        supportsMixedPicking: false,
+        supportsInitialDirectory: false,
+        supportsPersistedAccess: false,
+        supportsNativeUriRead: false,
+      ),
+    };
+  }
+
+  @override
   Future<List<PickedEntry>?> pick(FilegatePickOptions options) async {
     final entries = await methodChannel.invokeListMethod<Object?>(
       'pick',
