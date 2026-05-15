@@ -63,6 +63,7 @@ class _FakeFilegate extends Filegate {
     List<String> allowedExtensions = const [],
     String? title,
     String? initialDirectory,
+    bool persistAccess = true,
   }) async {
     return const <PickedEntry>[
       PickedEntry(
@@ -84,6 +85,7 @@ class _FakeFilegate extends Filegate {
     List<String> allowedExtensions = const [],
     String? title,
     String? initialDirectory,
+    bool persistAccess = true,
   }) async {
     return const <PickedEntry>[
       PickedEntry(

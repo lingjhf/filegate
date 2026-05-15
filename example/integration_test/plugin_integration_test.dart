@@ -127,8 +127,12 @@ void main() {
     const filegate = Filegate();
 
     final capabilities = await filegate.getCapabilities();
+    final transientPickOptions = const FilegatePickOptions(
+      persistAccess: false,
+    );
     expect(capabilities.supportsFilePicking, isTrue);
     expect(capabilities.supportsDirectoryPicking, isTrue);
+    expect(transientPickOptions.toMap(), containsPair('persistAccess', false));
     expect(pickedFile.locationKind, FilegateLocationKind.platformPath);
     expect(pickedFile.fileSystemPath, file.path);
     expect(pickedFile.size, bytes.length);
@@ -161,6 +165,7 @@ class _FakeFilegate extends Filegate {
     List<String> allowedExtensions = const [],
     String? title,
     String? initialDirectory,
+    bool persistAccess = true,
   }) async {
     return const <PickedEntry>[
       PickedEntry(
@@ -182,6 +187,7 @@ class _FakeFilegate extends Filegate {
     List<String> allowedExtensions = const [],
     String? title,
     String? initialDirectory,
+    bool persistAccess = true,
   }) async {
     return const <PickedEntry>[
       PickedEntry(

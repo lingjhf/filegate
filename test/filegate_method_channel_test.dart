@@ -90,12 +90,19 @@ void main() {
 
   test('pick decodes native entries', () async {
     final result = await platform.pick(
-      const FilegatePickOptions(allowedExtensions: ['.txt']),
+      const FilegatePickOptions(
+        allowedExtensions: ['.txt'],
+        persistAccess: false,
+      ),
     );
 
     expect(result, hasLength(1));
     expect(result!.single.name, 'example.txt');
     expect(result.single.kind, PickedEntryKind.file);
+    expect(
+      methodCalls.firstWhere((call) => call.method == 'pick').arguments,
+      containsPair('persistAccess', false),
+    );
   });
 
   test('capabilities describe Android SAF limits', () {

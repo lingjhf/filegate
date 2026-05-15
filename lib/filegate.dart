@@ -26,6 +26,7 @@ class Filegate {
     List<String> allowedExtensions = const [],
     String? title,
     String? initialDirectory,
+    bool persistAccess = true,
   }) {
     return pick(
       FilegatePickOptions(
@@ -34,6 +35,7 @@ class Filegate {
         allowedExtensions: allowedExtensions,
         title: title,
         initialDirectory: initialDirectory,
+        persistAccess: persistAccess,
       ),
     );
   }
@@ -43,6 +45,7 @@ class Filegate {
     List<String> allowedExtensions = const [],
     String? title,
     String? initialDirectory,
+    bool persistAccess = true,
   }) {
     return pick(
       FilegatePickOptions(
@@ -51,6 +54,7 @@ class Filegate {
         allowedExtensions: allowedExtensions,
         title: title,
         initialDirectory: initialDirectory,
+        persistAccess: persistAccess,
       ),
     );
   }
@@ -61,6 +65,7 @@ class Filegate {
     List<String> allowedExtensions = const [],
     String? title,
     String? initialDirectory,
+    bool persistAccess = true,
   }) {
     return pick(
       FilegatePickOptions(
@@ -70,6 +75,7 @@ class Filegate {
         allowedExtensions: allowedExtensions,
         title: title,
         initialDirectory: initialDirectory,
+        persistAccess: persistAccess,
       ),
     );
   }

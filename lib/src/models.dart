@@ -111,6 +111,7 @@ class FilegatePickOptions {
     this.recursive = false,
     this.title,
     this.initialDirectory,
+    this.persistAccess = true,
   });
 
   final FilegateSelectionMode selectionMode;
@@ -119,12 +120,14 @@ class FilegatePickOptions {
   final bool recursive;
   final String? title;
   final String? initialDirectory;
+  final bool persistAccess;
 
   Map<String, Object?> toMap() {
     return {
       'selectionMode': selectionMode.name,
       'allowMultiple': allowMultiple,
       'recursive': recursive,
+      'persistAccess': persistAccess,
       'allowedExtensions': allowedExtensions
           .map(_normalizeExtension)
           .where((extension) => extension.isNotEmpty)

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.4.0 - 2026-05-16
+
+### Added
+
+- Added `persistAccess` picker options so callers can request one-session
+  access instead of persisted URI permission on Android.
+
 ## 0.3.0 - 2026-05-16
 
 ### Added

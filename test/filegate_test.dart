@@ -413,10 +413,12 @@ void main() {
     const options = FilegatePickOptions(
       recursive: true,
       allowedExtensions: ['.txt', 'yaml'],
+      persistAccess: false,
     );
 
     expect(options.toMap()['recursive'], true);
     expect(options.toMap()['allowedExtensions'], const ['txt', 'yaml']);
+    expect(options.toMap()['persistAccess'], false);
   });
 
   test('pickFiles builds file-only options', () async {
@@ -428,6 +430,7 @@ void main() {
       allowMultiple: true,
       allowedExtensions: const ['txt'],
       title: 'Pick files',
+      persistAccess: false,
     );
 
     expect(
@@ -436,6 +439,7 @@ void main() {
     );
     expect(fakePlatform.lastOptions!.allowMultiple, true);
     expect(fakePlatform.lastOptions!.allowedExtensions, const ['txt']);
+    expect(fakePlatform.lastOptions!.persistAccess, false);
   });
 
   test('pickDirectoryFiles builds directory-only options', () async {
@@ -443,13 +447,17 @@ void main() {
     final fakePlatform = MockFilegatePlatform();
     FilegatePlatform.instance = fakePlatform;
 
-    await filegatePlugin.pickDirectoryFiles(recursive: true);
+    await filegatePlugin.pickDirectoryFiles(
+      recursive: true,
+      persistAccess: false,
+    );
 
     expect(
       fakePlatform.lastOptions!.selectionMode,
       FilegateSelectionMode.directoriesOnly,
     );
     expect(fakePlatform.lastOptions!.recursive, true);
+    expect(fakePlatform.lastOptions!.persistAccess, false);
   });
 
   test('pickMixed builds mixed options', () async {
@@ -457,7 +465,11 @@ void main() {
     final fakePlatform = MockFilegatePlatform();
     FilegatePlatform.instance = fakePlatform;
 
-    await filegatePlugin.pickMixed(allowMultiple: true, recursive: true);
+    await filegatePlugin.pickMixed(
+      allowMultiple: true,
+      recursive: true,
+      persistAccess: false,
+    );
 
     expect(
       fakePlatform.lastOptions!.selectionMode,
@@ -465,6 +477,7 @@ void main() {
     );
     expect(fakePlatform.lastOptions!.allowMultiple, true);
     expect(fakePlatform.lastOptions!.recursive, true);
+    expect(fakePlatform.lastOptions!.persistAccess, false);
   });
 
   test('readAllBytes aggregates all chunks', () async {

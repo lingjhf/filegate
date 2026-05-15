@@ -105,8 +105,17 @@ class FilegatePlugin :
 
         try {
             val entries = when (pending.selectionMode) {
-                "filesOnly" -> handlePickedFiles(data, pending.allowedExtensions)
-                "directoriesOnly" -> handlePickedDirectory(data, pending.recursive, pending.allowedExtensions)
+                "filesOnly" -> handlePickedFiles(
+                    data,
+                    pending.allowedExtensions,
+                    pending.persistAccess
+                )
+                "directoriesOnly" -> handlePickedDirectory(
+                    data,
+                    pending.recursive,
+                    pending.allowedExtensions,
+                    pending.persistAccess
+                )
                 "filesAndDirectories" -> throw FilegateError(
                     code = "unsupported_mode",
                     message = mixedModeUnsupportedMessage
@@ -156,6 +165,7 @@ class FilegatePlugin :
             ?.mapNotNull { it as? String }
             ?: emptyList()
         val initialDirectory = arguments?.get("initialDirectory") as? String
+        val persistAccess = arguments?.get("persistAccess") as? Boolean ?: true
 
         val intent = when (selectionMode) {
             "filesOnly" -> buildOpenDocumentIntent(allowMultiple, initialDirectory)
@@ -166,7 +176,13 @@ class FilegatePlugin :
             }
         }
 
-        pendingPick = PendingPick(result, selectionMode, recursive, allowedExtensions)
+        pendingPick = PendingPick(
+            result,
+            selectionMode,
+            recursive,
+            allowedExtensions,
+            persistAccess
+        )
         currentActivity.startActivityForResult(intent, requestCodePick)
     }
 
@@ -301,7 +317,8 @@ class FilegatePlugin :
 
     private fun handlePickedFiles(
         data: Intent,
-        allowedExtensions: List<String>
+        allowedExtensions: List<String>,
+        persistAccess: Boolean
     ): List<Map<String, Any?>> {
         val uris = mutableListOf<Uri>()
         val clipData = data.clipData
@@ -314,7 +331,9 @@ class FilegatePlugin :
         }
 
         return uris.mapNotNull { uri ->
-            takePersistablePermission(data, uri)
+            if (persistAccess) {
+                takePersistablePermission(data, uri)
+            }
             val document = DocumentFile.fromSingleUri(applicationContext, uri)
             val name = document?.name ?: queryDisplayName(uri) ?: uri.lastPathSegment ?: uri.toString()
             if (!matchesAllowedExtensions(name, allowedExtensions)) {
@@ -328,12 +347,15 @@ class FilegatePlugin :
     private fun handlePickedDirectory(
         data: Intent,
         recursive: Boolean,
-        allowedExtensions: List<String>
+        allowedExtensions: List<String>,
+        persistAccess: Boolean
     ): List<Map<String, Any?>> {
         val treeUri = data.data
             ?: throw FilegateError("path_not_found", "No directory URI was returned from the picker.")
 
-        takePersistablePermission(data, treeUri)
+        if (persistAccess) {
+            takePersistablePermission(data, treeUri)
+        }
         val root = DocumentFile.fromTreeUri(applicationContext, treeUri)
             ?: throw FilegateError("path_not_found", "Unable to resolve the selected directory.", treeUri.toString())
 
@@ -567,7 +589,8 @@ class FilegatePlugin :
         val result: Result,
         val selectionMode: String,
         val recursive: Boolean,
-        val allowedExtensions: List<String>
+        val allowedExtensions: List<String>,
+        val persistAccess: Boolean
     )
 
     private data class FilegateError(

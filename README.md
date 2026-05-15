@@ -23,7 +23,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  filegate: ^0.3.0
+  filegate: ^0.4.0
 ```
 
 If you are using this repository directly:
@@ -103,6 +103,7 @@ const filegate = Filegate();
 final files = await filegate.pickFiles(
   allowMultiple: true,
   allowedExtensions: ['txt', 'json'],
+  persistAccess: true,
 );
 
 if (files != null) {
@@ -167,6 +168,12 @@ Methods:
 - `openRead(String path, {int chunkSize, int start})`: Opens a cancellable byte stream.
 - `openReadWithProgress(String path, {int chunkSize})`: Streams chunks with cumulative progress.
 - `readAllBytes(String path, {int chunkSize, int? maxBytes})`: Reads all bytes with an optional safety limit.
+
+### FilegatePickOptions
+
+`persistAccess` defaults to `true` for picker helpers. On Android this asks the
+Storage Access Framework to persist the selected URI permission when the system
+grants one. Set it to `false` for one-session access.
 
 ### PickedEntry
 
