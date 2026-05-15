@@ -208,6 +208,7 @@ class FilegatePlugin :
             val handler = FileReadStreamHandler(
                 openStream = { openInputStream(path, start) },
                 chunkSize = chunkSize,
+                dispatchEvent = { action -> runOnMainThread(action) },
                 onDispose = { runOnMainThread { releaseReadStream(streamId) } }
             )
             eventChannel.setStreamHandler(handler)
@@ -578,6 +579,7 @@ class FilegatePlugin :
     private class FileReadStreamHandler(
         private val openStream: () -> InputStream,
         private val chunkSize: Int,
+        private val dispatchEvent: (() -> Unit) -> Unit,
         private val onDispose: () -> Unit
     ) : EventChannel.StreamHandler {
         private val executor = Executors.newSingleThreadExecutor()
@@ -646,16 +648,16 @@ class FilegatePlugin :
                     val read = stream.read(buffer)
                     when {
                         read < 0 -> {
-                            eventSink?.endOfStream()
+                            sendEndOfStream()
                             return
                         }
                         read == 0 -> continue
-                        else -> eventSink?.success(buffer.copyOf(read))
+                        else -> sendSuccess(buffer.copyOf(read))
                     }
                 }
             } catch (error: Exception) {
                 if (!isCancelled) {
-                    eventSink?.error("read_failed", error.localizedMessage, null)
+                    sendError("read_failed", error.localizedMessage, null)
                 }
             } finally {
                 runCatching { stream.close() }
@@ -663,6 +665,33 @@ class FilegatePlugin :
                 eventSink = null
                 executor.shutdown()
                 dispose()
+            }
+        }
+
+        private fun sendSuccess(bytes: ByteArray) {
+            val sink = eventSink ?: return
+            dispatchEvent {
+                if (!isCancelled) {
+                    sink.success(bytes)
+                }
+            }
+        }
+
+        private fun sendError(code: String, message: String?, details: Any?) {
+            val sink = eventSink ?: return
+            dispatchEvent {
+                if (!isCancelled) {
+                    sink.error(code, message, details)
+                }
+            }
+        }
+
+        private fun sendEndOfStream() {
+            val sink = eventSink ?: return
+            dispatchEvent {
+                if (!isCancelled) {
+                    sink.endOfStream()
+                }
             }
         }
 
