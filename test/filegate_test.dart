@@ -147,6 +147,11 @@ void main() {
     );
   });
 
+  test('error code constants include native picker failures', () {
+    expect(FilegateErrorCode.pickFailed, 'pick_failed');
+    expect(FilegateErrorCode.pickerFailed, 'picker_failed');
+  });
+
   test('openReadWithProgress wraps chunks with cumulative progress', () async {
     const filegatePlugin = Filegate();
     final fakePlatform = MockFilegatePlatform();

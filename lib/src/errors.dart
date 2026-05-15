@@ -10,6 +10,8 @@ abstract final class FilegateErrorCode {
   static const permissionDenied = 'permission_denied';
   static const persistPermissionFailed = 'persist_permission_failed';
   static const securityScopeFailed = 'security_scope_failed';
+  static const pickFailed = 'pick_failed';
+  static const pickerFailed = 'picker_failed';
   static const streamActive = 'stream_active';
   static const readOpenFailed = 'read_open_failed';
   static const readFailed = 'read_failed';

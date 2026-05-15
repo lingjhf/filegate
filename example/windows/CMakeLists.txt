@@ -52,8 +52,13 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
-# Enable the test target.
-set(include_filegate_tests TRUE)
+# Enable the plugin's native test target only for explicit test builds. The
+# integration-test build should not compile or discover the plugin gtest binary.
+if("$ENV{FILEGATE_BUILD_TESTS}" STREQUAL "true")
+  set(include_filegate_tests TRUE)
+else()
+  set(include_filegate_tests FALSE)
+endif()
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.

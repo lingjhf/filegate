@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.0.4 - 2026-05-16
+
+### Fixed
+
+- Exposed native picker failure error codes in `FilegateErrorCode`.
+
+### Changed
+
+- Added pub.dev dry-run validation to pull request CI.
+- Isolated Windows native test builds from Windows integration test builds in
+  CI.
+- Documented the release validation checklist.
+
 ## 0.0.3 - 2026-05-16
 
 ### Fixed

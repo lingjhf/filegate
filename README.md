@@ -182,4 +182,5 @@ Fields:
 
 Native failures are surfaced as `PlatformException`s. Common error codes are
 available in `FilegateErrorCode`, including `invalid_args`, `unsupported_mode`,
-`permission_denied`, `path_not_found`, `not_a_file`, and `read_failed`.
+`permission_denied`, `path_not_found`, `not_a_file`, `pick_failed`,
+`picker_failed`, and `read_failed`.

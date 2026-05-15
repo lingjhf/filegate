@@ -66,6 +66,9 @@ jobs:
         working-directory: example
         run: flutter test test/widget_test.dart
 
+      - name: Validate pub.dev package
+        run: flutter pub publish --dry-run
+
       - name: Enable Android emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -168,11 +171,18 @@ jobs:
 
       - name: Build Windows example
         working-directory: example
+        env:
+          FILEGATE_BUILD_TESTS: 'true'
         run: flutter build windows
 
       - name: Run Windows native tests
         working-directory: example/build/windows/x64/plugins/filegate
         run: ctest -C Release --output-on-failure --no-tests=error
+
+      - name: Clean Windows native test build output
+        working-directory: example
+        shell: pwsh
+        run: Remove-Item -Recurse -Force build/windows
 
       - name: Run Windows integration tests
         working-directory: example
