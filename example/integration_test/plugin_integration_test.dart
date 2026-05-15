@@ -1,8 +1,9 @@
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:filegate/filegate.dart';
 import 'package:filegate_example/main.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -91,6 +92,52 @@ void main() {
     expect(find.text('6 bytes'), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('read-preview')), findsOneWidget);
     expect(find.text('66 69 6c 65 21 0a'), findsOneWidget);
+  });
+
+  testWidgets('native file APIs read a sandbox file', (_) async {
+    final directory = await Directory.systemTemp.createTemp(
+      'filegate-integration-',
+    );
+    addTearDown(() async {
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
+    });
+
+    final bytes = Uint8List.fromList(const <int>[
+      0x66,
+      0x69,
+      0x6c,
+      0x65,
+      0x67,
+      0x61,
+      0x74,
+      0x65,
+      0x0a,
+    ]);
+    final file = File('${directory.path}${Platform.pathSeparator}sample.txt');
+    await file.writeAsBytes(bytes, flush: true);
+
+    const filegate = Filegate();
+
+    expect(await filegate.getFileSize(file.path), bytes.length);
+    await expectLater(
+      filegate.getFileSize(directory.path),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          FilegateErrorCode.notAFile,
+        ),
+      ),
+    );
+
+    final allBytes = await filegate.readAllBytes(file.path, chunkSize: 3);
+    expect(allBytes.toList(), bytes.toList());
+
+    final session = filegate.openRead(file.path, chunkSize: 4, start: 4);
+    final chunks = await session.stream.toList();
+    expect(chunks.expand((chunk) => chunk).toList(), bytes.skip(4).toList());
   });
 }
 

@@ -59,6 +59,10 @@ jobs:
       - name: Run package tests
         run: flutter test
 
+      - name: Run Android native tests
+        working-directory: example/android
+        run: ./gradlew :filegate:testDebugUnitTest
+
       - name: Run example widget tests
         working-directory: example
         run: flutter test test/widget_test.dart

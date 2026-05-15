@@ -34,7 +34,7 @@ class FilegatePlugin :
     private lateinit var applicationContext: Context
     private lateinit var messenger: io.flutter.plugin.common.BinaryMessenger
     private lateinit var channel: MethodChannel
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
     private var activity: Activity? = null
     private var activityBinding: ActivityPluginBinding? = null
     private val readChannels = mutableMapOf<String, EventChannel>()
@@ -53,10 +53,10 @@ class FilegatePlugin :
         result: Result
     ) {
         when (call.method) {
-            "pick" -> pick(call.arguments as? Map<String, Any?>, result)
-            "getFileSize" -> getFileSize(call.arguments as? Map<String, Any?>, result)
-            "startRead" -> startRead(call.arguments as? Map<String, Any?>, result)
-            "cancelRead" -> cancelRead(call.arguments as? Map<String, Any?>, result)
+            "pick" -> pick(call.arguments as? Map<*, *>, result)
+            "getFileSize" -> getFileSize(call.arguments as? Map<*, *>, result)
+            "startRead" -> startRead(call.arguments as? Map<*, *>, result)
+            "cancelRead" -> cancelRead(call.arguments as? Map<*, *>, result)
             else -> result.notImplemented()
         }
     }
@@ -128,7 +128,7 @@ class FilegatePlugin :
         return true
     }
 
-    private fun pick(arguments: Map<String, Any?>?, result: Result) {
+    private fun pick(arguments: Map<*, *>?, result: Result) {
         val currentActivity = activity
             ?: run {
                 result.error("no_activity", "File chooser requires a foreground activity.", null)
@@ -170,7 +170,7 @@ class FilegatePlugin :
         currentActivity.startActivityForResult(intent, requestCodePick)
     }
 
-    private fun startRead(arguments: Map<String, Any?>?, result: Result) {
+    private fun startRead(arguments: Map<*, *>?, result: Result) {
         val path = arguments?.get("path") as? String
         if (path.isNullOrEmpty()) {
             result.error("invalid_args", "A non-empty file path is required.", null)
@@ -223,7 +223,7 @@ class FilegatePlugin :
         }
     }
 
-    private fun getFileSize(arguments: Map<String, Any?>?, result: Result) {
+    private fun getFileSize(arguments: Map<*, *>?, result: Result) {
         val path = arguments?.get("path") as? String
         if (path.isNullOrEmpty()) {
             result.error("invalid_args", "A non-empty file path is required.", null)
@@ -246,7 +246,7 @@ class FilegatePlugin :
         }
     }
 
-    private fun cancelRead(arguments: Map<String, Any?>?, result: Result) {
+    private fun cancelRead(arguments: Map<*, *>?, result: Result) {
         val streamId = arguments?.get("streamId") as? String
         if (streamId.isNullOrEmpty()) {
             result.error("invalid_args", "A non-empty streamId is required.", null)
@@ -350,7 +350,7 @@ class FilegatePlugin :
         directory: DocumentFile,
         recursive: Boolean,
         allowedExtensions: List<String>,
-        destination: MutableList<Map<String, Any?>>, 
+        destination: MutableList<Map<String, Any?>>,
         currentRelativePath: String
     ) {
         for (child in directory.listFiles()) {
