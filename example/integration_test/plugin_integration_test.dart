@@ -121,6 +121,7 @@ void main() {
       path: file.path,
       name: 'sample.txt',
       kind: PickedEntryKind.file,
+      metadata: PickedEntryMetadata(size: bytes.length),
     );
 
     const filegate = Filegate();
@@ -130,6 +131,7 @@ void main() {
     expect(capabilities.supportsDirectoryPicking, isTrue);
     expect(pickedFile.locationKind, FilegateLocationKind.platformPath);
     expect(pickedFile.fileSystemPath, file.path);
+    expect(pickedFile.size, bytes.length);
 
     expect(await filegate.getFileSize(file.path), bytes.length);
     await expectLater(

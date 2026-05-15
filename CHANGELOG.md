@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-05-16
+
+### Added
+
+- Added `PickedEntryMetadata` and metadata helpers on `PickedEntry` for
+  optional file size, modification time, and MIME type values.
+
 ## 0.2.0 - 2026-05-16
 
 ### Added

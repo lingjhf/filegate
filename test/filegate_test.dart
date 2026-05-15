@@ -255,6 +255,50 @@ void main() {
     expect(customEntry.fileSystemPath, isNull);
   });
 
+  test('picked entry round-trips metadata', () {
+    final modifiedAt = DateTime.utc(2026, 5, 16, 1, 2, 3);
+    final entry = PickedEntry(
+      path: '/tmp/example.txt',
+      name: 'example.txt',
+      kind: PickedEntryKind.file,
+      metadata: PickedEntryMetadata(
+        size: 42,
+        modifiedAt: modifiedAt,
+        mimeType: 'text/plain',
+      ),
+    );
+
+    final restored = PickedEntry.fromMap(entry.toMap());
+
+    expect(restored.metadata.isNotEmpty, isTrue);
+    expect(restored.size, 42);
+    expect(restored.modifiedAt, modifiedAt);
+    expect(restored.mimeType, 'text/plain');
+  });
+
+  test('picked entry decodes ISO metadata timestamps', () {
+    final entry = PickedEntry.fromMap(const {
+      'path': '/tmp/example.txt',
+      'name': 'example.txt',
+      'kind': 'file',
+      'metadata': {'modifiedAt': '2026-05-16T01:02:03Z'},
+    });
+
+    expect(entry.modifiedAt, DateTime.utc(2026, 5, 16, 1, 2, 3));
+  });
+
+  test('picked entry rejects invalid metadata payloads', () {
+    expect(
+      () => PickedEntry.fromMap(const {
+        'path': '/tmp/example.txt',
+        'name': 'example.txt',
+        'kind': 'file',
+        'metadata': {'size': -1},
+      }),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
   test('directory picked entry round-trips kind', () {
     const entry = PickedEntry(
       path: '/tmp/Movie',

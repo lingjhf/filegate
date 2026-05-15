@@ -6,6 +6,47 @@ enum PickedEntryKind { file, directory }
 
 enum FilegateLocationKind { platformPath, fileUri, contentUri, otherUri }
 
+class PickedEntryMetadata {
+  const PickedEntryMetadata({this.size, this.modifiedAt, this.mimeType});
+
+  static const empty = PickedEntryMetadata();
+
+  final int? size;
+  final DateTime? modifiedAt;
+  final String? mimeType;
+
+  bool get isEmpty => size == null && modifiedAt == null && mimeType == null;
+
+  bool get isNotEmpty => !isEmpty;
+
+  Map<String, Object?> toMap() {
+    return {
+      'size': size,
+      'modifiedAt': modifiedAt?.millisecondsSinceEpoch,
+      'mimeType': mimeType,
+    };
+  }
+
+  factory PickedEntryMetadata.fromMap(Map<Object?, Object?> map) {
+    final size = map['size'];
+    final modifiedAt = map['modifiedAt'];
+    final mimeType = map['mimeType'];
+
+    if (size != null && (size is! int || size < 0)) {
+      throw ArgumentError.value(map, 'map', 'Invalid metadata size');
+    }
+    if (mimeType != null && mimeType is! String) {
+      throw ArgumentError.value(map, 'map', 'Invalid metadata MIME type');
+    }
+
+    return PickedEntryMetadata(
+      size: size as int?,
+      modifiedAt: _decodeModifiedAt(modifiedAt, map),
+      mimeType: mimeType as String?,
+    );
+  }
+}
+
 class FilegateCapabilities {
   const FilegateCapabilities({
     required this.supportsFilePicking,
@@ -104,12 +145,14 @@ class PickedEntry {
     required this.name,
     required this.kind,
     this.relativePath,
+    this.metadata = PickedEntryMetadata.empty,
   });
 
   final String path;
   final String name;
   final PickedEntryKind kind;
   final String? relativePath;
+  final PickedEntryMetadata metadata;
 
   bool get isFile => kind == PickedEntryKind.file;
 
@@ -125,12 +168,19 @@ class PickedEntry {
 
   String? get fileSystemPath => _fileSystemPathFor(path);
 
+  int? get size => metadata.size;
+
+  DateTime? get modifiedAt => metadata.modifiedAt;
+
+  String? get mimeType => metadata.mimeType;
+
   Map<String, Object?> toMap() {
     return {
       'path': path,
       'name': name,
       'kind': kind.name,
       'relativePath': relativePath,
+      'metadata': metadata.toMap(),
     };
   }
 
@@ -139,19 +189,26 @@ class PickedEntry {
     final name = map['name'];
     final kind = map['kind'];
     final relativePath = map['relativePath'];
+    final metadata = map['metadata'];
 
     if (path is! String ||
         name is! String ||
         kind is! String ||
-        (relativePath != null && relativePath is! String)) {
+        (relativePath != null && relativePath is! String) ||
+        (metadata != null && metadata is! Map<Object?, Object?>)) {
       throw ArgumentError.value(map, 'map', 'Invalid picked entry payload');
     }
+
+    final decodedMetadata = metadata as Map<Object?, Object?>?;
 
     return PickedEntry(
       path: path,
       name: name,
       kind: PickedEntryKind.values.byName(kind),
       relativePath: relativePath as String?,
+      metadata: decodedMetadata == null
+          ? PickedEntryMetadata.empty
+          : PickedEntryMetadata.fromMap(decodedMetadata),
     );
   }
 }
@@ -203,6 +260,22 @@ String? _fileSystemPathFor(String identifier) {
 bool _shouldDecodeAsWindowsFileUri(Uri uri) {
   return _windowsFileUriPathPattern.hasMatch(uri.path) ||
       (uri.host.isNotEmpty && uri.host.toLowerCase() != 'localhost');
+}
+
+DateTime? _decodeModifiedAt(Object? value, Map<Object?, Object?> source) {
+  if (value == null) {
+    return null;
+  }
+  if (value is int) {
+    return DateTime.fromMillisecondsSinceEpoch(value, isUtc: true);
+  }
+  if (value is String) {
+    final parsed = DateTime.tryParse(value);
+    if (parsed != null) {
+      return parsed.toUtc();
+    }
+  }
+  throw ArgumentError.value(source, 'map', 'Invalid metadata modifiedAt');
 }
 
 class FileReadChunk {
