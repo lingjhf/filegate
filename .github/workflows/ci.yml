@@ -79,7 +79,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           working-directory: example
-          script: flutter test --timeout=20m integration_test/plugin_integration_test.dart -d emulator-5554
+          script: flutter drive --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart -d emulator-5554
 
       - name: Build Android example
         working-directory: example

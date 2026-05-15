@@ -22,12 +22,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -59,20 +53,12 @@ jobs:
       - name: Run package tests
         run: flutter test
 
-      - name: Run Android native tests
-        working-directory: example/android
-        run: ./gradlew :filegate:testDebugUnitTest
-
       - name: Run example widget tests
         working-directory: example
         run: flutter test test/widget_test.dart
 
       - name: Validate pub.dev package
         run: flutter pub publish --dry-run
-
-      - name: Build Android example
-        working-directory: example
-        run: flutter build apk --debug
 
       - name: Build iOS example
         working-directory: example
@@ -85,6 +71,76 @@ jobs:
       - name: Run macOS integration tests
         working-directory: example
         run: flutter test --timeout=20m integration_test/plugin_integration_test.dart -d macos
+
+  validate-android:
+    name: Validate Android release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Verify tag matches pubspec version
+        run: |
+          version="$(grep '^version:' pubspec.yaml | awk '{print $2}')"
+          tag="$GITHUB_REF_NAME"
+          if [ "$version" != "$tag" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match pubspec version $version."
+            exit 1
+          fi
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Install package dependencies
+        run: flutter pub get
+
+      - name: Install example dependencies
+        working-directory: example
+        run: flutter pub get
+
+      - name: Run package tests
+        run: flutter test
+
+      - name: Run Android native tests
+        working-directory: example/android
+        run: ./gradlew :filegate:testDebugUnitTest
+
+      - name: Run example widget tests
+        working-directory: example
+        run: flutter test test/widget_test.dart
+
+      - name: Enable Android emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Android integration tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          working-directory: example
+          script: flutter drive --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart -d emulator-5554
+
+      - name: Build Android example
+        working-directory: example
+        run: flutter build apk --debug
 
   validate-windows:
     name: Validate Windows release
@@ -199,6 +255,7 @@ jobs:
     name: Publish
     needs:
       - validate
+      - validate-android
       - validate-windows
       - validate-linux
     runs-on: ubuntu-latest
