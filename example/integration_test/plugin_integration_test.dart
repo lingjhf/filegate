@@ -168,6 +168,18 @@ void main() {
     final session = filegate.openRead(file.path, chunkSize: 4, start: 4);
     final chunks = await session.stream.toList();
     expect(chunks.expand((chunk) => chunk).toList(), bytes.skip(4).toList());
+
+    final boundedSession = filegate.openRead(
+      file.path,
+      chunkSize: 3,
+      start: 2,
+      end: 7,
+    );
+    final boundedChunks = await boundedSession.stream.toList();
+    expect(
+      boundedChunks.expand((chunk) => chunk).toList(),
+      bytes.skip(2).take(5).toList(),
+    );
   });
 }
 

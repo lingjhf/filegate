@@ -141,6 +141,11 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       result(FlutterError(code: "invalid_args", message: "start must not be negative.", details: nil))
       return
     }
+    let end = arguments?["end"] as? Int
+    if let end, end < start {
+      result(FlutterError(code: "invalid_args", message: "end must be greater than or equal to start.", details: nil))
+      return
+    }
 
     let fileURL = resolveURL(from: path)
     let streamId = UUID().uuidString
@@ -179,6 +184,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       },
       errorDetails: path,
       chunkSize: chunkSize,
+      maxBytes: end.map { $0 - start },
       onDispose: { [weak self] in
         if temporaryAccess {
           fileURL.stopAccessingSecurityScopedResource()
@@ -419,6 +425,7 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
   private let handleFactory: () throws -> FileHandle
   private let errorDetails: String
   private let chunkSize: Int
+  private let maxBytes: Int?
   private let queue = DispatchQueue(label: "filegate.ios.read", qos: .utility)
   private let lock = NSLock()
   private let onDispose: () -> Void
@@ -432,11 +439,13 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
     handleFactory: @escaping () throws -> FileHandle,
     errorDetails: String,
     chunkSize: Int,
+    maxBytes: Int?,
     onDispose: @escaping () -> Void
   ) {
     self.handleFactory = handleFactory
     self.errorDetails = errorDetails
     self.chunkSize = chunkSize
+    self.maxBytes = maxBytes
     self.onDispose = onDispose
     super.init()
   }
@@ -501,14 +510,23 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
       }
     }
 
+    var remainingBytes = maxBytes
     while true {
       if withLock({ isCancelled }) {
         return
       }
+      if let remainingBytes, remainingBytes <= 0 {
+        emitEndOfStream()
+        return
+      }
 
       do {
-        let data = handle.readData(ofLength: chunkSize)
+        let currentChunkSize = remainingBytes.map { min(chunkSize, $0) } ?? chunkSize
+        let data = handle.readData(ofLength: currentChunkSize)
         if !data.isEmpty {
+          if let currentRemainingBytes = remainingBytes {
+            remainingBytes = currentRemainingBytes - data.count
+          }
           emitChunk(data)
           continue
         }

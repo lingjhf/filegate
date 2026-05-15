@@ -131,6 +131,11 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
       result(FlutterError(code: "invalid_args", message: "start must not be negative.", details: nil))
       return
     }
+    let end = arguments?["end"] as? Int
+    if let end, end < start {
+      result(FlutterError(code: "invalid_args", message: "end must be greater than or equal to start.", details: nil))
+      return
+    }
 
     var isDirectory = ObjCBool(false)
     guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else {
@@ -150,7 +155,12 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
 
     let streamId = UUID().uuidString
     let channel = FlutterEventChannel(name: "filegate/read/\(streamId)", binaryMessenger: messenger)
-    let handler = FileReadStreamHandler(path: path, start: start, chunkSize: chunkSize) { [weak self] in
+    let handler = FileReadStreamHandler(
+      path: path,
+      start: start,
+      chunkSize: chunkSize,
+      maxBytes: end.map { $0 - start }
+    ) { [weak self] in
       DispatchQueue.main.async {
         self?.releaseReadStream(streamId)
       }
@@ -285,6 +295,7 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
   private let path: String
   private let start: Int
   private let chunkSize: Int
+  private let maxBytes: Int?
   private let queue = DispatchQueue(label: "filegate.read", qos: .utility)
   private let lock = NSLock()
   private let onDispose: () -> Void
@@ -294,10 +305,11 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
   private var isCancelled = false
   private var isDisposed = false
 
-  init(path: String, start: Int, chunkSize: Int, onDispose: @escaping () -> Void) {
+  init(path: String, start: Int, chunkSize: Int, maxBytes: Int?, onDispose: @escaping () -> Void) {
     self.path = path
     self.start = start
     self.chunkSize = chunkSize
+    self.maxBytes = maxBytes
     self.onDispose = onDispose
     super.init()
   }
@@ -369,14 +381,29 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
       }
     }
 
+    var remainingBytes = maxBytes
     while true {
       if withLock({ isCancelled }) {
         return
       }
+      if let remainingBytes, remainingBytes <= 0 {
+        guard let sink = withLock({ isCancelled ? nil : eventSink }) else {
+          return
+        }
+        DispatchQueue.main.async { [weak self] in
+          sink(FlutterEndOfEventStream)
+          self?.finishStream()
+        }
+        return
+      }
 
       do {
-        let data = handle.readData(ofLength: chunkSize)
+        let currentChunkSize = remainingBytes.map { min(chunkSize, $0) } ?? chunkSize
+        let data = handle.readData(ofLength: currentChunkSize)
         if !data.isEmpty {
+          if let currentRemainingBytes = remainingBytes {
+            remainingBytes = currentRemainingBytes - data.count
+          }
           guard let sink = withLock({ isCancelled ? nil : eventSink }) else {
             return
           }

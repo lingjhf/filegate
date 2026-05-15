@@ -33,6 +33,7 @@ internal class FilegatePluginTest {
         val handler = FilegatePlugin.FileReadStreamHandler(
             openStream = { ByteArrayInputStream(byteArrayOf(1, 2, 3)) },
             chunkSize = 2,
+            maxBytes = null,
             dispatchEvent = { action -> action() },
             onDispose = { disposeCount += 1 }
         )
@@ -47,6 +48,23 @@ internal class FilegatePluginTest {
         handler.onCancel(null)
 
         assertEquals(1, disposeCount)
+    }
+
+    @Test
+    fun fileReadStreamHandler_stopsAtConfiguredByteLimit() {
+        val handler = FilegatePlugin.FileReadStreamHandler(
+            openStream = { ByteArrayInputStream(byteArrayOf(1, 2, 3, 4, 5)) },
+            chunkSize = 3,
+            maxBytes = 4,
+            dispatchEvent = { action -> action() },
+            onDispose = { }
+        )
+        val sink = RecordingEventSink()
+
+        handler.onListen(null, sink)
+
+        assertTrue(sink.awaitEnd())
+        assertEquals(listOf(listOf(1, 2, 3), listOf(4)), sink.successEvents)
     }
 
     private class RecordingEventSink : EventChannel.EventSink {

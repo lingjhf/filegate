@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.0 - 2026-05-16
+
+### Fixed
+
+- Hardened native stream readers so Android, iOS, and macOS honor the
+  exclusive `end` offset for ranged `openRead()` calls.
+
 ## 0.6.0 - 2026-05-16
 
 ### Added

@@ -203,6 +203,11 @@ class FilegatePlugin :
             is Long -> rawStart
             else -> 0L
         }
+        val end = when (val rawEnd = arguments?.get("end")) {
+            is Int -> rawEnd.toLong()
+            is Long -> rawEnd
+            else -> null
+        }
 
         if (chunkSize <= 0) {
             result.error("invalid_args", "chunkSize must be greater than zero.", null)
@@ -210,6 +215,10 @@ class FilegatePlugin :
         }
         if (start < 0) {
             result.error("invalid_args", "start must not be negative.", null)
+            return
+        }
+        if (end != null && end < start) {
+            result.error("invalid_args", "end must be greater than or equal to start.", null)
             return
         }
 
@@ -224,6 +233,7 @@ class FilegatePlugin :
             val handler = FileReadStreamHandler(
                 openStream = { openInputStream(path, start) },
                 chunkSize = chunkSize,
+                maxBytes = end?.minus(start),
                 dispatchEvent = { action -> runOnMainThread(action) },
                 onDispose = { runOnMainThread { releaseReadStream(streamId) } }
             )
@@ -602,6 +612,7 @@ class FilegatePlugin :
     internal class FileReadStreamHandler(
         private val openStream: () -> InputStream,
         private val chunkSize: Int,
+        private val maxBytes: Long?,
         private val dispatchEvent: (() -> Unit) -> Unit,
         private val onDispose: () -> Unit
     ) : EventChannel.StreamHandler {
@@ -666,8 +677,19 @@ class FilegatePlugin :
             }
 
             try {
-                val buffer = ByteArray(chunkSize)
+                var remainingBytes = maxBytes
                 while (!isCancelled) {
+                    if (remainingBytes != null && remainingBytes <= 0L) {
+                        sendEndOfStream()
+                        return
+                    }
+
+                    val currentChunkSize = if (remainingBytes != null && remainingBytes < chunkSize) {
+                        remainingBytes.toInt()
+                    } else {
+                        chunkSize
+                    }
+                    val buffer = ByteArray(currentChunkSize)
                     val read = stream.read(buffer)
                     when {
                         read < 0 -> {
@@ -675,7 +697,12 @@ class FilegatePlugin :
                             return
                         }
                         read == 0 -> continue
-                        else -> sendSuccess(buffer.copyOf(read))
+                        else -> {
+                            if (remainingBytes != null) {
+                                remainingBytes -= read.toLong()
+                            }
+                            sendSuccess(buffer.copyOf(read))
+                        }
                     }
                 }
             } catch (error: Exception) {

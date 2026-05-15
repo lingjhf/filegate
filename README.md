@@ -23,7 +23,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  filegate: ^0.6.0
+  filegate: ^0.7.0
 ```
 
 If you are using this repository directly:
@@ -185,7 +185,8 @@ Methods:
 - `pickDirectoryFiles(...)`: Picks a directory and returns matching files.
 - `pickMixed(...)`: Picks files and directories where supported.
 - `getFileSize(String path)`: Returns a file size when known.
-- `openRead(String path, {int chunkSize, int start, int? end})`: Opens a cancellable byte stream.
+- `openRead(String path, {int chunkSize, int start, int? end})`: Opens a
+  cancellable byte stream. `start` is inclusive and `end` is exclusive.
 - `openReadWithProgress(String path, {int chunkSize, int start, int? end})`: Streams chunks with cumulative progress.
 - `readAllBytes(String path, {int chunkSize, int? maxBytes})`: Reads all bytes with an optional safety limit.
 - `readByteRange(String path, {int start, int length, int chunkSize})`: Reads

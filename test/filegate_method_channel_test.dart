@@ -386,6 +386,28 @@ void main() {
     },
   );
 
+  test('openRead stops desktop streams at exclusive end offsets', () async {
+    final directory = Directory.systemTemp.createTempSync('filegate-test-');
+    addTearDown(() {
+      directory.deleteSync(recursive: true);
+    });
+    final file = File('${directory.path}${Platform.pathSeparator}sample.bin')
+      ..writeAsBytesSync(const [1, 2, 3, 4, 5, 6]);
+
+    final session = desktopPlatform.openRead(
+      file.path,
+      chunkSize: 4,
+      start: 1,
+      end: 5,
+    );
+    final chunks = await session.stream.map((chunk) => chunk.toList()).toList();
+
+    expect(chunks, const [
+      <int>[2, 3, 4, 5],
+    ]);
+    expect(methodCalls.where((call) => call.method == 'startRead'), isEmpty);
+  });
+
   test('openRead returns empty desktop stream past EOF', () async {
     final directory = Directory.systemTemp.createTempSync('filegate-test-');
     addTearDown(() {
