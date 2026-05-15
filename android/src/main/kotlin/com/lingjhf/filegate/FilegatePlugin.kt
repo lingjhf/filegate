@@ -576,7 +576,7 @@ class FilegatePlugin :
         val details: Any? = null
     ) : Exception(message)
 
-    private class FileReadStreamHandler(
+    internal class FileReadStreamHandler(
         private val openStream: () -> InputStream,
         private val chunkSize: Int,
         private val dispatchEvent: (() -> Unit) -> Unit,
@@ -599,18 +599,18 @@ class FilegatePlugin :
                     inputStream = openStream()
                 } catch (error: FilegateError) {
                     events.error(error.code, error.message, error.details)
+                    events.endOfStream()
                     executor.shutdown()
-                    dispose()
                     return
                 } catch (error: SecurityException) {
                     events.error("permission_denied", error.localizedMessage, null)
+                    events.endOfStream()
                     executor.shutdown()
-                    dispose()
                     return
                 } catch (error: Exception) {
                     events.error("read_open_failed", error.localizedMessage, null)
+                    events.endOfStream()
                     executor.shutdown()
-                    dispose()
                     return
                 }
 
@@ -658,13 +658,13 @@ class FilegatePlugin :
             } catch (error: Exception) {
                 if (!isCancelled) {
                     sendError("read_failed", error.localizedMessage, null)
+                    sendEndOfStream()
                 }
             } finally {
                 runCatching { stream.close() }
                 inputStream = null
                 eventSink = null
                 executor.shutdown()
-                dispose()
             }
         }
 
