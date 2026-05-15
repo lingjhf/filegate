@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.0.2 - 2026-05-16
+
+### Added
+
+- Added native Windows and Linux picker implementations.
+- Added Windows and Linux CI branches that run package tests, example widget tests, native tests, and integration tests independently.
+
 ## 0.0.1 - 2026-05-16
 
 ### Added
