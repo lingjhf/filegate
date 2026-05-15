@@ -24,6 +24,15 @@ class FilegatePlugin : public flutter::Plugin {
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue> &method_call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+
+ private:
+  void Pick(
+      const flutter::EncodableValue* arguments,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+
+  void GetFileSize(
+      const flutter::EncodableValue* arguments,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 };
 
 }  // namespace filegate

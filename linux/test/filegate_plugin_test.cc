@@ -1,30 +1,32 @@
 #include <flutter_linux/flutter_linux.h>
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "include/filegate/filegate_plugin.h"
 #include "filegate_plugin_private.h"
-
-// This demonstrates a simple unit test of the C portion of this plugin's
-// implementation.
-//
-// Once you have built the plugin's example app, you can run these tests
-// from the command line. For instance, for a plugin called my_plugin
-// built for x64 debug, run:
-// $ build/linux/x64/debug/plugins/my_plugin/my_plugin_test
+#include "include/filegate/filegate_plugin.h"
 
 namespace filegate {
 namespace test {
 
-TEST(FilegatePlugin, GetPlatformVersion) {
-  g_autoptr(FlMethodResponse) response = get_platform_version();
+TEST(FilegatePlugin, GetFileSizeMissingPathReturnsInvalidArgs) {
+  g_autoptr(FlMethodResponse) response = filegate_get_file_size(nullptr);
   ASSERT_NE(response, nullptr);
-  ASSERT_TRUE(FL_IS_METHOD_SUCCESS_RESPONSE(response));
-  FlValue* result = fl_method_success_response_get_result(
-      FL_METHOD_SUCCESS_RESPONSE(response));
-  ASSERT_EQ(fl_value_get_type(result), FL_VALUE_TYPE_STRING);
-  // The full string varies, so just validate that it has the right format.
-  EXPECT_THAT(fl_value_get_string(result), testing::StartsWith("Linux "));
+  ASSERT_TRUE(FL_IS_METHOD_ERROR_RESPONSE(response));
+  EXPECT_STREQ(fl_method_error_response_get_code(
+                   FL_METHOD_ERROR_RESPONSE(response)),
+               "invalid_args");
+}
+
+TEST(FilegatePlugin, PickMixedModeReturnsUnsupportedMode) {
+  g_autoptr(FlValue) arguments = fl_value_new_map();
+  fl_value_set_string_take(arguments, "selectionMode",
+                           fl_value_new_string("filesAndDirectories"));
+
+  g_autoptr(FlMethodResponse) response = filegate_pick_files(arguments);
+  ASSERT_NE(response, nullptr);
+  ASSERT_TRUE(FL_IS_METHOD_ERROR_RESPONSE(response));
+  EXPECT_STREQ(fl_method_error_response_get_code(
+                   FL_METHOD_ERROR_RESPONSE(response)),
+               "unsupported_mode");
 }
 
 }  // namespace test

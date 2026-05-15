@@ -14,7 +14,7 @@ memory first.
 - Windows
 - Linux
 
-Android, iOS, and macOS provide native picker implementations. Desktop file
+All supported platforms provide native picker implementations. Desktop file
 reading for paths available to Dart uses `dart:io`.
 
 ## Installation
@@ -61,6 +61,27 @@ read using current-session security-scoped access.
 
 File picking uses `NSOpenPanel`. The macOS plugin target requires macOS 11.0 or
 newer.
+
+### Windows
+
+File picking uses `IFileOpenDialog`.
+
+- File selection uses the normal open-file dialog.
+- Directory selection uses the same dialog in `FOS_PICKFOLDERS` mode and then
+  enumerates matching files from the selected directory.
+- Mixed file and directory selection in one picker call is not supported by the
+  standard Windows dialog APIs. `pickMixed` returns `unsupported_mode` on
+  Windows.
+
+### Linux
+
+File picking uses the GTK file chooser.
+
+- File selection uses `GTK_FILE_CHOOSER_ACTION_OPEN`.
+- Directory selection uses `GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER` and then
+  enumerates matching files from the selected directory.
+- Mixed file and directory selection in one picker call is not supported by the
+  standard GTK chooser. `pickMixed` returns `unsupported_mode` on Linux.
 
 ## Usage
 
