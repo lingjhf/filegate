@@ -1,4 +1,4 @@
-package com.example.filegate
+package com.lingjhf.filegate
 
 import android.app.Activity
 import android.content.Context

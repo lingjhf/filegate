@@ -1,7 +1,8 @@
 name: filegate
-description: "A cross-platform Flutter file chooser plugin."
+description: "A Flutter plugin for native file picking and streamed file reading across Android, iOS, macOS, Windows, and Linux."
 version: 0.0.1
-homepage:
+repository: https://github.com/lingjhf/filegate
+issue_tracker: https://github.com/lingjhf/filegate/issues
 
 environment:
   sdk: ^3.11.5
@@ -35,7 +36,7 @@ flutter:
   plugin:
     platforms:
       android:
-        package: com.example.filegate
+        package: com.lingjhf.filegate
         pluginClass: FilegatePlugin
       ios:
         pluginClass: FilegatePlugin

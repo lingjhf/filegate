@@ -1,4 +1,4 @@
-package com.example.filegate
+package com.lingjhf.filegate
 
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel

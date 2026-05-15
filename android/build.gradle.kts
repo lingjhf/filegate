@@ -1,4 +1,4 @@
-group = "com.example.filegate"
+group = "com.lingjhf.filegate"
 version = "1.0-SNAPSHOT"
 
 buildscript {
@@ -27,7 +27,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.filegate"
+    namespace = "com.lingjhf.filegate"
 
     compileSdk = 36
 
