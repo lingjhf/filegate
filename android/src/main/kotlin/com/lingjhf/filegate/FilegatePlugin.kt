@@ -22,6 +22,7 @@ import java.io.FileInputStream
 import java.io.InputStream
 import java.util.UUID
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 class FilegatePlugin :
     FlutterPlugin,
@@ -569,6 +570,7 @@ class FilegatePlugin :
         private val onDispose: () -> Unit
     ) : EventChannel.StreamHandler {
         private val executor = Executors.newSingleThreadExecutor()
+        private val isDisposed = AtomicBoolean(false)
         @Volatile private var isCancelled = false
         @Volatile private var eventSink: EventChannel.EventSink? = null
         @Volatile private var inputStream: InputStream? = null
@@ -584,12 +586,18 @@ class FilegatePlugin :
                     inputStream = openStream()
                 } catch (error: FilegateError) {
                     events.error(error.code, error.message, error.details)
+                    executor.shutdown()
+                    dispose()
                     return
                 } catch (error: SecurityException) {
                     events.error("permission_denied", error.localizedMessage, null)
+                    executor.shutdown()
+                    dispose()
                     return
                 } catch (error: Exception) {
                     events.error("read_open_failed", error.localizedMessage, null)
+                    executor.shutdown()
+                    dispose()
                     return
                 }
 
@@ -611,6 +619,7 @@ class FilegatePlugin :
             runCatching { inputStream?.close() }
             inputStream = null
             eventSink = null
+            executor.shutdown()
             dispose()
         }
 
@@ -647,7 +656,9 @@ class FilegatePlugin :
         }
 
         private fun dispose() {
-            onDispose()
+            if (isDisposed.compareAndSet(false, true)) {
+                onDispose()
+            }
         }
     }
 

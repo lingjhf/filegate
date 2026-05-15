@@ -116,6 +116,22 @@ void main() {
     expect(restored.relativePath, entry.relativePath);
   });
 
+  test('directory picked entry round-trips kind', () {
+    const entry = PickedEntry(
+      path: '/tmp/Movie',
+      name: 'Movie',
+      kind: PickedEntryKind.directory,
+      relativePath: 'Movie',
+    );
+
+    final restored = PickedEntry.fromMap(entry.toMap());
+
+    expect(restored.path, entry.path);
+    expect(restored.name, entry.name);
+    expect(restored.kind, PickedEntryKind.directory);
+    expect(restored.relativePath, entry.relativePath);
+  });
+
   test('openReadWithProgress wraps chunks with cumulative progress', () async {
     const filegatePlugin = Filegate();
     final fakePlatform = MockFilegatePlatform();

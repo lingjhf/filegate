@@ -8,6 +8,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   private var readChannels: [String: FlutterEventChannel] = [:]
   private var readHandlers: [String: FileReadStreamHandler] = [:]
   private var pendingPickResult: FlutterResult?
+  private var pendingSelectionMode = "filesOnly"
   private var pendingPickRecursive = false
   private var pendingAllowedExtensions: [String] = []
 
@@ -87,6 +88,10 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     }
 
     let selectionMode = arguments?["selectionMode"] as? String ?? "filesOnly"
+    guard ["filesOnly", "directoriesOnly", "filesAndDirectories"].contains(selectionMode) else {
+      result(FlutterError(code: "invalid_args", message: "Unknown selection mode.", details: selectionMode))
+      return
+    }
     let allowMultiple = arguments?["allowMultiple"] as? Bool ?? false
     let recursive = arguments?["recursive"] as? Bool ?? false
     let allowedExtensions = arguments?["allowedExtensions"] as? [String] ?? []
@@ -109,6 +114,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     }
 
     pendingPickResult = result
+    pendingSelectionMode = selectionMode
     pendingPickRecursive = recursive
     pendingAllowedExtensions = allowedExtensions
 
@@ -164,7 +170,9 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
         if temporaryAccess {
           fileURL.stopAccessingSecurityScopedResource()
         }
-        self?.releaseReadStream(streamId)
+        DispatchQueue.main.async {
+          self?.releaseReadStream(streamId)
+        }
       }
     )
 
@@ -186,6 +194,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
 
   public func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
     let result = pendingPickResult
+    let selectionMode = pendingSelectionMode
     let recursive = pendingPickRecursive
     let allowedExtensions = pendingAllowedExtensions
     clearPendingPickState()
@@ -195,7 +204,12 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     }
 
     do {
-      let entries = try resolvePickedEntries(urls: urls, recursive: recursive, allowedExtensions: allowedExtensions)
+      let entries = try resolvePickedEntries(
+        urls: urls,
+        selectionMode: selectionMode,
+        recursive: recursive,
+        allowedExtensions: allowedExtensions
+      )
       result(entries)
     } catch let error as FilegateError {
       result(FlutterError(code: error.code, message: error.message, details: error.details))
@@ -211,12 +225,14 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
 
   private func clearPendingPickState() {
     pendingPickResult = nil
+    pendingSelectionMode = "filesOnly"
     pendingPickRecursive = false
     pendingAllowedExtensions = []
   }
 
   private func resolvePickedEntries(
     urls: [URL],
+    selectionMode: String,
     recursive: Bool,
     allowedExtensions: [String]
   ) throws -> [[String: Any]] {
@@ -225,6 +241,11 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     for url in urls {
       let values = try url.resourceValues(forKeys: [.isDirectoryKey])
       if values.isDirectory == true {
+        if selectionMode == "filesAndDirectories" {
+          entriesByPath[url.absoluteString] = serializeDirectoryEntry(url)
+          continue
+        }
+
         let scopeActive = url.startAccessingSecurityScopedResource()
         guard scopeActive || FileManager.default.isReadableFile(atPath: url.path) else {
           throw FilegateError(code: "security_scope_failed", message: "Unable to access the selected directory in the current session.", details: url.absoluteString)
@@ -301,6 +322,15 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       "path": url.absoluteString,
       "name": url.lastPathComponent,
       "kind": "file",
+      "relativePath": relativePath ?? url.lastPathComponent,
+    ]
+  }
+
+  private func serializeDirectoryEntry(_ url: URL, relativePath: String? = nil) -> [String: Any] {
+    [
+      "path": url.absoluteString,
+      "name": url.lastPathComponent,
+      "kind": "directory",
       "relativePath": relativePath ?? url.lastPathComponent,
     ]
   }
@@ -394,23 +424,26 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
   }
 
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
-    lock.lock()
-    defer { lock.unlock() }
-
-    guard eventSink == nil else {
+    if withLock({ eventSink != nil }) {
       return FlutterError(code: "stream_active", message: "This file stream is already active.", details: nil)
     }
 
+    let handle: FileHandle
     do {
-      fileHandle = try handleFactory()
+      handle = try handleFactory()
     } catch let error as FilegateError {
+      disposeIfNeeded()
       return FlutterError(code: error.code, message: error.message, details: error.details)
     } catch {
+      disposeIfNeeded()
       return FlutterError(code: "read_open_failed", message: error.localizedDescription, details: errorDetails)
     }
 
+    lock.lock()
+    fileHandle = handle
     eventSink = events
     isCancelled = false
+    lock.unlock()
 
     queue.async { [weak self] in
       self?.readLoop()
@@ -472,23 +505,29 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
     guard let sink = withLock({ isCancelled ? nil : eventSink }) else {
       return
     }
-    sink(FlutterStandardTypedData(bytes: data))
+    DispatchQueue.main.async {
+      sink(FlutterStandardTypedData(bytes: data))
+    }
   }
 
   private func emitEndOfStream() {
     guard let sink = withLock({ isCancelled ? nil : eventSink }) else {
       return
     }
-    sink(FlutterEndOfEventStream)
-    finishStream()
+    DispatchQueue.main.async { [weak self] in
+      sink(FlutterEndOfEventStream)
+      self?.finishStream()
+    }
   }
 
   private func emitError(_ error: Error) {
     guard let sink = withLock({ isCancelled ? nil : eventSink }) else {
       return
     }
-    sink(FlutterError(code: "read_failed", message: error.localizedDescription, details: errorDetails))
-    finishStream()
+    DispatchQueue.main.async { [weak self] in
+      sink(FlutterError(code: "read_failed", message: error.localizedDescription, details: self?.errorDetails))
+      self?.finishStream()
+    }
   }
 
   private func finishStream() {

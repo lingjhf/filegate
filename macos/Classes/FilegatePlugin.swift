@@ -66,6 +66,10 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
   private func pick(arguments: [String: Any]?, result: @escaping FlutterResult) {
     DispatchQueue.main.async {
       let selectionMode = arguments?["selectionMode"] as? String ?? "filesOnly"
+      guard ["filesOnly", "directoriesOnly", "filesAndDirectories"].contains(selectionMode) else {
+        result(FlutterError(code: "invalid_args", message: "Unknown selection mode.", details: selectionMode))
+        return
+      }
       let allowMultiple = arguments?["allowMultiple"] as? Bool ?? false
       let recursive = arguments?["recursive"] as? Bool ?? false
       let allowedExtensions = arguments?["allowedExtensions"] as? [String] ?? []
@@ -98,6 +102,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
       do {
         let entries = try self.resolvePickedEntries(
           urls: panel.urls,
+          selectionMode: selectionMode,
           recursive: recursive,
           allowedExtensions: allowedExtensions
         )
@@ -192,6 +197,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
 
   private func resolvePickedEntries(
     urls: [URL],
+    selectionMode: String,
     recursive: Bool,
     allowedExtensions: [String]
   ) throws -> [[String: Any]] {
@@ -199,7 +205,11 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
     for url in urls {
       let values = try url.resourceValues(forKeys: [.isDirectoryKey])
       if values.isDirectory == true {
-        entries.append(contentsOf: try expandDirectory(at: url, recursive: recursive, allowedExtensions: allowedExtensions))
+        if selectionMode == "filesAndDirectories" {
+          entries.append(Self.serializeEntry(url))
+        } else {
+          entries.append(contentsOf: try expandDirectory(at: url, recursive: recursive, allowedExtensions: allowedExtensions))
+        }
       } else if Self.matchesAllowedExtensions(url: url, allowedExtensions: allowedExtensions) {
         entries.append(Self.serializeEntry(url))
       }
@@ -301,6 +311,9 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
     }
 
     guard let handle = FileHandle(forReadingAtPath: path) else {
+      DispatchQueue.main.async { [weak self] in
+        self?.disposeIfNeeded()
+      }
       return FlutterError(code: "read_open_failed", message: "Unable to open the provided file path.", details: path)
     }
 
@@ -308,6 +321,9 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
       try handle.seek(toOffset: UInt64(start))
     } catch {
       try? handle.close()
+      DispatchQueue.main.async { [weak self] in
+        self?.disposeIfNeeded()
+      }
       return FlutterError(code: "read_failed", message: error.localizedDescription, details: path)
     }
 

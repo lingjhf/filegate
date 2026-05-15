@@ -57,10 +57,18 @@ File picking uses the Android Storage Access Framework.
 File picking uses `UIDocumentPickerViewController`. Returned document URLs are
 read using current-session security-scoped access.
 
+- Directory selection enumerates matching files from the selected directory.
+- Mixed file and directory selection returns selected files and directory
+  entries.
+
 ### macOS
 
 File picking uses `NSOpenPanel`. The macOS plugin target requires macOS 11.0 or
 newer.
+
+- Directory selection enumerates matching files from the selected directory.
+- Mixed file and directory selection returns selected files and directory
+  entries.
 
 ### Windows
 
