@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-05-16
+
+### Added
+
+- Added `FilegateLocationKind` and `PickedEntry` location helpers for
+  distinguishing platform paths, `file:` URIs, Android `content:` URIs, and
+  other URI identifiers.
+
 ## 0.1.0 - 2026-05-16
 
 ### Added

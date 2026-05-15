@@ -117,12 +117,19 @@ void main() {
     ]);
     final file = File('${directory.path}${Platform.pathSeparator}sample.txt');
     await file.writeAsBytes(bytes, flush: true);
+    final pickedFile = PickedEntry(
+      path: file.path,
+      name: 'sample.txt',
+      kind: PickedEntryKind.file,
+    );
 
     const filegate = Filegate();
 
     final capabilities = await filegate.getCapabilities();
     expect(capabilities.supportsFilePicking, isTrue);
     expect(capabilities.supportsDirectoryPicking, isTrue);
+    expect(pickedFile.locationKind, FilegateLocationKind.platformPath);
+    expect(pickedFile.fileSystemPath, file.path);
 
     expect(await filegate.getFileSize(file.path), bytes.length);
     await expectLater(

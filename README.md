@@ -23,7 +23,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  filegate: ^0.0.3
+  filegate: ^0.2.0
 ```
 
 If you are using this repository directly:
@@ -178,6 +178,15 @@ Fields:
 - `name`: Display name.
 - `kind`: `PickedEntryKind.file` or `PickedEntryKind.directory`.
 - `relativePath`: Relative path when enumerating directory contents.
+
+Location helpers:
+
+- `locationKind`: `platformPath`, `fileUri`, `contentUri`, or `otherUri`.
+- `isUri`: Whether `path` is a URI instead of a platform file path.
+- `isContentUri`: Whether `path` is an Android `content:` URI.
+- `uri`: Parsed `Uri` when `path` contains a URI scheme.
+- `fileSystemPath`: A local file system path for platform paths and `file:`
+  URIs, or `null` for identifiers such as Android `content:` URIs.
 
 ### FilegateCapabilities
 

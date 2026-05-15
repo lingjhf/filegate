@@ -4,6 +4,8 @@ enum FilegateSelectionMode { filesOnly, directoriesOnly, filesAndDirectories }
 
 enum PickedEntryKind { file, directory }
 
+enum FilegateLocationKind { platformPath, fileUri, contentUri, otherUri }
+
 class FilegateCapabilities {
   const FilegateCapabilities({
     required this.supportsFilePicking,
@@ -113,6 +115,16 @@ class PickedEntry {
 
   bool get isDirectory => kind == PickedEntryKind.directory;
 
+  FilegateLocationKind get locationKind => _locationKindFor(path);
+
+  bool get isUri => locationKind != FilegateLocationKind.platformPath;
+
+  bool get isContentUri => locationKind == FilegateLocationKind.contentUri;
+
+  Uri? get uri => _uriFor(path);
+
+  String? get fileSystemPath => _fileSystemPathFor(path);
+
   Map<String, Object?> toMap() {
     return {
       'path': path,
@@ -142,6 +154,55 @@ class PickedEntry {
       relativePath: relativePath as String?,
     );
   }
+}
+
+final _windowsDrivePathPattern = RegExp(r'^[A-Za-z]:(?:[\\/]|[^\\/].*)');
+final _windowsFileUriPathPattern = RegExp(r'^/[A-Za-z]:(?:/|$)');
+
+FilegateLocationKind _locationKindFor(String identifier) {
+  final uri = _uriFor(identifier);
+  if (uri == null) {
+    return FilegateLocationKind.platformPath;
+  }
+
+  return switch (uri.scheme.toLowerCase()) {
+    'file' => FilegateLocationKind.fileUri,
+    'content' => FilegateLocationKind.contentUri,
+    _ => FilegateLocationKind.otherUri,
+  };
+}
+
+Uri? _uriFor(String identifier) {
+  if (identifier.isEmpty || _windowsDrivePathPattern.hasMatch(identifier)) {
+    return null;
+  }
+
+  final uri = Uri.tryParse(identifier);
+  if (uri == null || uri.scheme.isEmpty) {
+    return null;
+  }
+  return uri;
+}
+
+String? _fileSystemPathFor(String identifier) {
+  final uri = _uriFor(identifier);
+  if (uri == null) {
+    return identifier;
+  }
+  if (uri.scheme.toLowerCase() != 'file') {
+    return null;
+  }
+
+  try {
+    return uri.toFilePath(windows: _shouldDecodeAsWindowsFileUri(uri));
+  } on Object {
+    return null;
+  }
+}
+
+bool _shouldDecodeAsWindowsFileUri(Uri uri) {
+  return _windowsFileUriPathPattern.hasMatch(uri.path) ||
+      (uri.host.isNotEmpty && uri.host.toLowerCase() != 'localhost');
 }
 
 class FileReadChunk {

@@ -186,6 +186,75 @@ void main() {
     expect(restored.isDirectory, isFalse);
   });
 
+  test('picked entry classifies platform paths', () {
+    const posixEntry = PickedEntry(
+      path: '/tmp/example.txt',
+      name: 'example.txt',
+      kind: PickedEntryKind.file,
+    );
+    const windowsEntry = PickedEntry(
+      path: r'C:\tmp\example.txt',
+      name: 'example.txt',
+      kind: PickedEntryKind.file,
+    );
+    const windowsDriveRelativeEntry = PickedEntry(
+      path: r'C:tmp\example.txt',
+      name: 'example.txt',
+      kind: PickedEntryKind.file,
+    );
+
+    expect(posixEntry.locationKind, FilegateLocationKind.platformPath);
+    expect(posixEntry.isUri, isFalse);
+    expect(posixEntry.uri, isNull);
+    expect(posixEntry.fileSystemPath, '/tmp/example.txt');
+    expect(windowsEntry.locationKind, FilegateLocationKind.platformPath);
+    expect(windowsEntry.fileSystemPath, r'C:\tmp\example.txt');
+    expect(
+      windowsDriveRelativeEntry.locationKind,
+      FilegateLocationKind.platformPath,
+    );
+    expect(windowsDriveRelativeEntry.fileSystemPath, r'C:tmp\example.txt');
+  });
+
+  test('picked entry exposes file URI paths', () {
+    const posixEntry = PickedEntry(
+      path: 'file:///tmp/example.txt',
+      name: 'example.txt',
+      kind: PickedEntryKind.file,
+    );
+    const windowsEntry = PickedEntry(
+      path: 'file:///C:/Users/example.txt',
+      name: 'example.txt',
+      kind: PickedEntryKind.file,
+    );
+
+    expect(posixEntry.locationKind, FilegateLocationKind.fileUri);
+    expect(posixEntry.isUri, isTrue);
+    expect(posixEntry.uri!.scheme, 'file');
+    expect(posixEntry.fileSystemPath, '/tmp/example.txt');
+    expect(windowsEntry.fileSystemPath, r'C:\Users\example.txt');
+  });
+
+  test('picked entry classifies non-file URIs', () {
+    const contentEntry = PickedEntry(
+      path: 'content://com.example.provider/document/1',
+      name: 'example.txt',
+      kind: PickedEntryKind.file,
+    );
+    const customEntry = PickedEntry(
+      path: 'filegate://example/item',
+      name: 'example.txt',
+      kind: PickedEntryKind.file,
+    );
+
+    expect(contentEntry.locationKind, FilegateLocationKind.contentUri);
+    expect(contentEntry.isContentUri, isTrue);
+    expect(contentEntry.uri!.scheme, 'content');
+    expect(contentEntry.fileSystemPath, isNull);
+    expect(customEntry.locationKind, FilegateLocationKind.otherUri);
+    expect(customEntry.fileSystemPath, isNull);
+  });
+
   test('directory picked entry round-trips kind', () {
     const entry = PickedEntry(
       path: '/tmp/Movie',
