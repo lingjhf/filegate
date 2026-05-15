@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.8.0 - 2026-05-16
+
+### Added
+
+- Added an API contract document for the 1.0 release track.
+- Added a capabilities page to the example app to demonstrate
+  `Filegate.getCapabilities()`.
+
 ## 0.7.0 - 2026-05-16
 
 ### Fixed

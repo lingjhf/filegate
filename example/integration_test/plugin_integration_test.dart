@@ -14,6 +14,7 @@ void main() {
     await tester.pumpWidget(MyApp(filegate: _FakeFilegate()));
 
     expect(find.text('filegate example'), findsOneWidget);
+    expect(find.text('Capabilities'), findsOneWidget);
     expect(find.text('Files'), findsOneWidget);
     expect(find.text('Directory'), findsOneWidget);
     expect(find.text('Read file'), findsOneWidget);
@@ -24,6 +25,17 @@ void main() {
   ) async {
     await tester.pumpWidget(MyApp(filegate: _FakeFilegate()));
 
+    await tester.tap(
+      find.byKey(const ValueKey<String>('capabilities-example-tile')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey<String>('capabilities-list')),
+      findsOneWidget,
+    );
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey<String>('files-example-tile')));
     await tester.pumpAndSettle();
     expect(
@@ -184,6 +196,18 @@ void main() {
 }
 
 class _FakeFilegate extends Filegate {
+  @override
+  Future<FilegateCapabilities> getCapabilities() async {
+    return const FilegateCapabilities(
+      supportsFilePicking: true,
+      supportsDirectoryPicking: true,
+      supportsMixedPicking: false,
+      supportsInitialDirectory: true,
+      supportsPersistedAccess: true,
+      supportsNativeUriRead: false,
+    );
+  }
+
   @override
   Future<List<PickedEntry>?> pickFiles({
     bool allowMultiple = false,

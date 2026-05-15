@@ -1,6 +1,7 @@
 import 'package:filegate/filegate.dart';
 import 'package:flutter/material.dart';
 
+import 'src/capabilities_example_page.dart';
 import 'src/directory_picker_example_page.dart';
 import 'src/file_picker_example_page.dart';
 import 'src/read_file_example_page.dart';
@@ -31,6 +32,19 @@ class _ExampleListPage extends StatelessWidget {
       appBar: AppBar(title: const Text('filegate example')),
       body: ListView(
         children: <Widget>[
+          ListTile(
+            key: const ValueKey<String>('capabilities-example-tile'),
+            title: const Text('Capabilities'),
+            subtitle: const Text('Inspect supported platform features'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => CapabilitiesExamplePage(filegate: filegate),
+                ),
+              );
+            },
+          ),
           ListTile(
             key: const ValueKey<String>('files-example-tile'),
             title: const Text('Files'),

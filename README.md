@@ -23,7 +23,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  filegate: ^0.7.0
+  filegate: ^0.8.0
 ```
 
 If you are using this repository directly:
@@ -172,6 +172,9 @@ final entries = await filegate.listDirectoryFiles(
 ```
 
 ## API
+
+The public behavior expected for the 1.0 release track is documented in
+[doc/api_contract.md](doc/api_contract.md).
 
 ### Filegate
 
