@@ -201,7 +201,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       return
     }
 
-    releaseReadStream(streamId)
+    cancelReadStream(streamId)
     result(nil)
   }
 
@@ -385,6 +385,11 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
 
   private func releaseReadStream(_ streamId: String) {
     readHandlers.removeValue(forKey: streamId)
+    readChannels.removeValue(forKey: streamId)?.setStreamHandler(nil)
+  }
+
+  private func cancelReadStream(_ streamId: String) {
+    readHandlers.removeValue(forKey: streamId)?.cancel()
     readChannels.removeValue(forKey: streamId)?.setStreamHandler(nil)
   }
 
