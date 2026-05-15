@@ -117,6 +117,7 @@ class MethodChannelFilegate extends FilegatePlatform {
     String path, {
     int chunkSize = 64 * 1024,
     int start = 0,
+    int? end,
   }) {
     if (path.isEmpty) {
       throw ArgumentError.value(path, 'path', 'path must not be empty');
@@ -131,10 +132,22 @@ class MethodChannelFilegate extends FilegatePlatform {
     if (start < 0) {
       throw ArgumentError.value(start, 'start', 'start must not be negative');
     }
+    if (end != null && end < start) {
+      throw ArgumentError.value(
+        end,
+        'end',
+        'end must be greater than or equal to start',
+      );
+    }
 
     if (!_forceNativeRead &&
         (Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
-      return _openDesktopRead(path, chunkSize: chunkSize, start: start);
+      return _openDesktopRead(
+        path,
+        chunkSize: chunkSize,
+        start: start,
+        end: end,
+      );
     }
 
     StreamSubscription<dynamic>? subscription;
@@ -152,6 +165,7 @@ class MethodChannelFilegate extends FilegatePlatform {
             'path': path,
             'chunkSize': chunkSize,
             'start': start,
+            'end': end,
           });
 
           if (streamId == null || streamId!.isEmpty) {
@@ -244,6 +258,7 @@ class MethodChannelFilegate extends FilegatePlatform {
     String path, {
     required int chunkSize,
     required int start,
+    required int? end,
   }) {
     final controller = StreamController<Uint8List>();
     RandomAccessFile? file;
@@ -277,15 +292,16 @@ class MethodChannelFilegate extends FilegatePlatform {
 
         file = await File(path).open();
         final length = await file!.length();
-        if (start > length) {
+        final endOffset = end == null || end > length ? length : end;
+        if (start >= endOffset) {
           await closeController();
           return;
         }
 
         var offset = start;
         await file!.setPosition(offset);
-        while (!cancelled && offset < length) {
-          final remainingBytes = length - offset;
+        while (!cancelled && offset < endOffset) {
+          final remainingBytes = endOffset - offset;
           final currentChunkSize = remainingBytes < chunkSize
               ? remainingBytes
               : chunkSize;

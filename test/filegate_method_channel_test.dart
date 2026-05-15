@@ -181,6 +181,10 @@ void main() {
       () => platform.openRead('/tmp/example.txt', start: -1),
       throwsA(isA<ArgumentError>()),
     );
+    expect(
+      () => platform.openRead('/tmp/example.txt', start: 2, end: 1),
+      throwsA(isA<ArgumentError>()),
+    );
   });
 
   test('openRead returns a cancellable session', () async {
@@ -218,14 +222,15 @@ void main() {
     ]);
   });
 
-  test('openRead forwards custom start offsets', () async {
-    final session = platform.openRead('/tmp/example.txt', start: 123);
+  test('openRead forwards custom range offsets', () async {
+    final session = platform.openRead('/tmp/example.txt', start: 123, end: 456);
     await session.stream.drain<void>();
 
-    expect(
-      methodCalls.firstWhere((call) => call.method == 'startRead').arguments,
-      containsPair('start', 123),
-    );
+    final arguments = methodCalls
+        .firstWhere((call) => call.method == 'startRead')
+        .arguments;
+    expect(arguments, containsPair('start', 123));
+    expect(arguments, containsPair('end', 456));
   });
 
   test('openRead with custom start remains cancellable', () async {

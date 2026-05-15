@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-05-16
+
+### Added
+
+- Added `Filegate.readByteRange()` for bounded range reads built on the
+  streamed reader.
+- Added optional exclusive `end` offsets to `openRead()` and
+  `openReadWithProgress()`.
+
 ## 0.4.0 - 2026-05-16
 
 ### Added

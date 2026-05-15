@@ -43,6 +43,7 @@ abstract class FilegatePlatform extends PlatformInterface {
     String path, {
     int chunkSize = 64 * 1024,
     int start = 0,
+    int? end,
   }) {
     throw UnimplementedError('openRead() has not been implemented.');
   }

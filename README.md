@@ -23,7 +23,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  filegate: ^0.4.0
+  filegate: ^0.5.0
 ```
 
 If you are using this repository directly:
@@ -151,6 +151,16 @@ final bytes = await filegate.readAllBytes(
 );
 ```
 
+### Read a byte range
+
+```dart
+final header = await filegate.readByteRange(
+  '/path/to/file.bin',
+  start: 0,
+  length: 512,
+);
+```
+
 ## API
 
 ### Filegate
@@ -165,9 +175,11 @@ Methods:
 - `pickDirectoryFiles(...)`: Picks a directory and returns matching files.
 - `pickMixed(...)`: Picks files and directories where supported.
 - `getFileSize(String path)`: Returns a file size when known.
-- `openRead(String path, {int chunkSize, int start})`: Opens a cancellable byte stream.
-- `openReadWithProgress(String path, {int chunkSize})`: Streams chunks with cumulative progress.
+- `openRead(String path, {int chunkSize, int start, int? end})`: Opens a cancellable byte stream.
+- `openReadWithProgress(String path, {int chunkSize, int start, int? end})`: Streams chunks with cumulative progress.
 - `readAllBytes(String path, {int chunkSize, int? maxBytes})`: Reads all bytes with an optional safety limit.
+- `readByteRange(String path, {int start, int length, int chunkSize})`: Reads
+  an exact byte range using the streamed reader.
 
 ### FilegatePickOptions
 

@@ -152,6 +152,14 @@ void main() {
     final allBytes = await filegate.readAllBytes(file.path, chunkSize: 3);
     expect(allBytes.toList(), bytes.toList());
 
+    final rangeBytes = await filegate.readByteRange(
+      file.path,
+      start: 4,
+      length: 4,
+      chunkSize: 2,
+    );
+    expect(rangeBytes.toList(), bytes.skip(4).take(4).toList());
+
     final session = filegate.openRead(file.path, chunkSize: 4, start: 4);
     final chunks = await session.stream.toList();
     expect(chunks.expand((chunk) => chunk).toList(), bytes.skip(4).toList());

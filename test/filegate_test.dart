@@ -14,6 +14,10 @@ class MockFilegatePlatform
     Uint8List.fromList(const [1, 2, 3]),
   ];
   int cancelCount = 0;
+  int openReadCount = 0;
+  int? lastChunkSize;
+  int? lastStart;
+  int? lastEnd;
   Object? getFileSizeError;
   FilegateCapabilities capabilities = const FilegateCapabilities(
     supportsFilePicking: true,
@@ -55,7 +59,12 @@ class MockFilegatePlatform
     String path, {
     int chunkSize = 64 * 1024,
     int start = 0,
+    int? end,
   }) {
+    openReadCount += 1;
+    lastChunkSize = chunkSize;
+    lastStart = start;
+    lastEnd = end;
     if (start < 0) {
       throw ArgumentError.value(start, 'start', 'start must not be negative');
     }
@@ -372,6 +381,26 @@ void main() {
     expect(events.last.progress, closeTo(1.0, 0.0001));
   });
 
+  test('openReadWithProgress uses ranged totals', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform()
+      ..fileSize = 10
+      ..chunks = <Uint8List>[
+        Uint8List.fromList(const [1, 2, 3]),
+      ];
+    FilegatePlatform.instance = fakePlatform;
+
+    final events = await filegatePlugin
+        .openReadWithProgress('/tmp/example.txt', start: 2, end: 5)
+        .stream
+        .toList();
+
+    expect(events.single.totalBytes, 3);
+    expect(events.single.progress, 1.0);
+    expect(fakePlatform.lastStart, 2);
+    expect(fakePlatform.lastEnd, 5);
+  });
+
   test(
     'openReadWithProgress keeps null progress when file size is unknown',
     () async {
@@ -504,6 +533,95 @@ void main() {
       throwsA(isA<StateError>()),
     );
     expect(fakePlatform.cancelCount, 1);
+  });
+
+  test(
+    'readByteRange reads an exact range without explicit cancellation',
+    () async {
+      const filegatePlugin = Filegate();
+      final fakePlatform = MockFilegatePlatform()
+        ..chunks = <Uint8List>[
+          Uint8List.fromList(const [1, 2, 3]),
+          Uint8List.fromList(const [4, 5, 6]),
+        ];
+      FilegatePlatform.instance = fakePlatform;
+
+      final data = await filegatePlugin.readByteRange(
+        '/tmp/example.txt',
+        start: 2,
+        length: 5,
+        chunkSize: 4,
+      );
+
+      expect(data.toList(), const [1, 2, 3, 4, 5]);
+      expect(fakePlatform.lastStart, 2);
+      expect(fakePlatform.lastEnd, 7);
+      expect(fakePlatform.lastChunkSize, 4);
+      expect(fakePlatform.cancelCount, 0);
+    },
+  );
+
+  test('readByteRange clamps chunk size to requested length', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    FilegatePlatform.instance = fakePlatform;
+
+    await filegatePlugin.readByteRange(
+      '/tmp/example.txt',
+      start: 0,
+      length: 2,
+      chunkSize: 64,
+    );
+
+    expect(fakePlatform.lastChunkSize, 2);
+  });
+
+  test(
+    'readByteRange returns empty bytes without opening zero-length ranges',
+    () async {
+      const filegatePlugin = Filegate();
+      final fakePlatform = MockFilegatePlatform();
+      FilegatePlatform.instance = fakePlatform;
+
+      final data = await filegatePlugin.readByteRange(
+        '/tmp/example.txt',
+        start: 10,
+        length: 0,
+      );
+
+      expect(data, isEmpty);
+      expect(fakePlatform.openReadCount, 0);
+    },
+  );
+
+  test('readByteRange validates range arguments', () {
+    const filegatePlugin = Filegate();
+
+    expect(
+      () => filegatePlugin.readByteRange(
+        '/tmp/example.txt',
+        start: -1,
+        length: 1,
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => filegatePlugin.readByteRange(
+        '/tmp/example.txt',
+        start: 0,
+        length: -1,
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => filegatePlugin.readByteRange(
+        '/tmp/example.txt',
+        start: 0,
+        length: 1,
+        chunkSize: 0,
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
   });
 
   test('openRead rejects negative start offsets', () {

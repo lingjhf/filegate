@@ -87,14 +87,21 @@ class Filegate {
   FileReadSession<FileReadChunk> openReadWithProgress(
     String path, {
     int chunkSize = 64 * 1024,
+    int start = 0,
+    int? end,
   }) {
-    final baseSession = openRead(path, chunkSize: chunkSize);
+    final baseSession = openRead(
+      path,
+      chunkSize: chunkSize,
+      start: start,
+      end: end,
+    );
 
     late final Stream<FileReadChunk> progressStream;
     progressStream = (() async* {
       int? totalBytes;
       try {
-        totalBytes = await getFileSize(path);
+        totalBytes = _rangeTotalBytes(await getFileSize(path), start, end);
       } on PlatformException {
         totalBytes = null;
       }
@@ -120,11 +127,13 @@ class Filegate {
     String path, {
     int chunkSize = 64 * 1024,
     int start = 0,
+    int? end,
   }) {
     return FilegatePlatform.instance.openRead(
       path,
       chunkSize: chunkSize,
       start: start,
+      end: end,
     );
   }
 
@@ -151,4 +160,71 @@ class Filegate {
 
     return builder.takeBytes();
   }
+
+  Future<Uint8List> readByteRange(
+    String path, {
+    required int start,
+    required int length,
+    int chunkSize = 64 * 1024,
+  }) async {
+    if (start < 0) {
+      throw ArgumentError.value(start, 'start', 'start must not be negative');
+    }
+    if (length < 0) {
+      throw ArgumentError.value(
+        length,
+        'length',
+        'length must not be negative',
+      );
+    }
+    if (chunkSize <= 0) {
+      throw ArgumentError.value(
+        chunkSize,
+        'chunkSize',
+        'chunkSize must be greater than zero',
+      );
+    }
+    if (length == 0) {
+      return Uint8List(0);
+    }
+
+    final session = openRead(
+      path,
+      chunkSize: chunkSize < length ? chunkSize : length,
+      start: start,
+      end: start + length,
+    );
+    final builder = BytesBuilder(copy: false);
+
+    try {
+      await for (final chunk in session.stream) {
+        final remaining = length - builder.length;
+        if (remaining <= 0) {
+          break;
+        }
+        if (chunk.length <= remaining) {
+          builder.add(chunk);
+        } else {
+          builder.add(Uint8List.sublistView(chunk, 0, remaining));
+          break;
+        }
+      }
+    } catch (_) {
+      await session.cancel();
+      rethrow;
+    }
+
+    return builder.takeBytes();
+  }
+}
+
+int? _rangeTotalBytes(int? fileSize, int start, int? end) {
+  if (fileSize == null) {
+    return null;
+  }
+  final effectiveEnd = end == null || end > fileSize ? fileSize : end;
+  if (start >= effectiveEnd) {
+    return 0;
+  }
+  return effectiveEnd - start;
 }
