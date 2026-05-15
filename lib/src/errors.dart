@@ -1,0 +1,17 @@
+abstract final class FilegateErrorCode {
+  static const invalidArgs = 'invalid_args';
+  static const unsupportedMode = 'unsupported_mode';
+  static const noActivity = 'no_activity';
+  static const noViewController = 'no_view_controller';
+  static const pickerActive = 'picker_active';
+  static const pathNotFound = 'path_not_found';
+  static const notAFile = 'not_a_file';
+  static const notADirectory = 'not_a_directory';
+  static const permissionDenied = 'permission_denied';
+  static const persistPermissionFailed = 'persist_permission_failed';
+  static const securityScopeFailed = 'security_scope_failed';
+  static const streamActive = 'stream_active';
+  static const readOpenFailed = 'read_open_failed';
+  static const readFailed = 'read_failed';
+  static const enumerationFailed = 'enumeration_failed';
+}

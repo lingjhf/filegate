@@ -1,0 +1,184 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+      - linux/**
+      - windows/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dart-and-android:
+    name: Dart and Android
+    if: >
+      github.event_name != 'push' ||
+      (!startsWith(github.ref, 'refs/heads/linux/') &&
+       !startsWith(github.ref, 'refs/heads/windows/'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Install package dependencies
+        run: flutter pub get
+
+      - name: Install example dependencies
+        working-directory: example
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run package tests
+        run: flutter test
+
+      - name: Run example widget tests
+        working-directory: example
+        run: flutter test test/widget_test.dart
+
+      - name: Build Android example
+        working-directory: example
+        run: flutter build apk --debug
+
+  apple:
+    name: iOS and macOS
+    if: >
+      github.event_name != 'push' ||
+      (!startsWith(github.ref, 'refs/heads/linux/') &&
+       !startsWith(github.ref, 'refs/heads/windows/'))
+    runs-on: macos-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Install package dependencies
+        run: flutter pub get
+
+      - name: Install example dependencies
+        working-directory: example
+        run: flutter pub get
+
+      - name: Build iOS example
+        working-directory: example
+        run: flutter build ios --no-codesign
+
+      - name: Build macOS example
+        working-directory: example
+        run: flutter build macos
+
+      - name: Run macOS integration tests
+        working-directory: example
+        run: flutter test --timeout=20m integration_test/plugin_integration_test.dart
+
+  windows:
+    name: Windows
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/linux/')
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Install package dependencies
+        run: flutter pub get
+
+      - name: Install example dependencies
+        working-directory: example
+        run: flutter pub get
+
+      - name: Build Windows example
+        working-directory: example
+        run: flutter build windows
+
+      - name: Run Windows native tests
+        working-directory: example/build/windows/x64/plugins/filegate
+        run: ctest -C Release --output-on-failure --no-tests=error
+
+  linux:
+    name: Linux
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/windows/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake libgtk-3-dev ninja-build pkg-config
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Linux desktop
+        run: flutter config --enable-linux-desktop
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Install package dependencies
+        run: flutter pub get
+
+      - name: Install example dependencies
+        working-directory: example
+        run: flutter pub get
+
+      - name: Build Linux example
+        working-directory: example
+        run: flutter build linux
+
+      - name: Run Linux native tests
+        working-directory: example/build/linux/x64/release/plugins/filegate
+        run: ctest --output-on-failure --no-tests=error
