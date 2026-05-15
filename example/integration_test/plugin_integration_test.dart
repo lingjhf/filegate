@@ -160,6 +160,11 @@ void main() {
     );
     expect(rangeBytes.toList(), bytes.skip(4).take(4).toList());
 
+    final listedFiles = await filegate.listDirectoryFiles(directory.path);
+    expect(listedFiles, hasLength(1));
+    expect(listedFiles.single.name, 'sample.txt');
+    expect(listedFiles.single.size, bytes.length);
+
     final session = filegate.openRead(file.path, chunkSize: 4, start: 4);
     final chunks = await session.stream.toList();
     expect(chunks.expand((chunk) => chunk).toList(), bytes.skip(4).toList());

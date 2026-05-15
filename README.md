@@ -23,7 +23,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  filegate: ^0.5.0
+  filegate: ^0.6.0
 ```
 
 If you are using this repository directly:
@@ -161,6 +161,16 @@ final header = await filegate.readByteRange(
 );
 ```
 
+### List files in a known directory
+
+```dart
+final entries = await filegate.listDirectoryFiles(
+  '/path/to/folder',
+  recursive: true,
+  allowedExtensions: ['txt'],
+);
+```
+
 ## API
 
 ### Filegate
@@ -180,6 +190,8 @@ Methods:
 - `readAllBytes(String path, {int chunkSize, int? maxBytes})`: Reads all bytes with an optional safety limit.
 - `readByteRange(String path, {int start, int length, int chunkSize})`: Reads
   an exact byte range using the streamed reader.
+- `listDirectoryFiles(String directoryPath, {bool recursive, List<String> allowedExtensions})`:
+  Lists files from a known file-system directory without opening a picker.
 
 ### FilegatePickOptions
 

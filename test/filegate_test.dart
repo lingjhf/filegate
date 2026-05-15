@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:filegate/filegate.dart';
@@ -620,6 +622,75 @@ void main() {
         length: 1,
         chunkSize: 0,
       ),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
+  test('listDirectoryFiles enumerates files with metadata', () async {
+    final root = await Directory.systemTemp.createTemp('filegate-list-');
+    addTearDown(() async {
+      if (await root.exists()) {
+        await root.delete(recursive: true);
+      }
+    });
+    final nested = Directory('${root.path}${Platform.pathSeparator}nested');
+    await nested.create();
+    final readme = File('${root.path}${Platform.pathSeparator}README.md');
+    final notes = File('${nested.path}${Platform.pathSeparator}notes.TXT');
+    await readme.writeAsString('readme');
+    await notes.writeAsString('notes');
+
+    const filegatePlugin = Filegate();
+    final entries = await filegatePlugin.listDirectoryFiles(
+      root.path,
+      recursive: true,
+      allowedExtensions: const ['txt'],
+    );
+
+    expect(entries, hasLength(1));
+    expect(entries.single.name, 'notes.TXT');
+    expect(entries.single.relativePath, 'nested/notes.TXT');
+    expect(entries.single.size, 5);
+    expect(entries.single.modifiedAt, isNotNull);
+  });
+
+  test('listDirectoryFiles reports missing and non-directory paths', () async {
+    final root = await Directory.systemTemp.createTemp('filegate-list-');
+    addTearDown(() async {
+      if (await root.exists()) {
+        await root.delete(recursive: true);
+      }
+    });
+    final file = File('${root.path}${Platform.pathSeparator}sample.txt');
+    await file.writeAsString('sample');
+
+    await expectLater(
+      const Filegate().listDirectoryFiles(
+        '${root.path}${Platform.pathSeparator}missing',
+      ),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          FilegateErrorCode.pathNotFound,
+        ),
+      ),
+    );
+    await expectLater(
+      const Filegate().listDirectoryFiles(file.path),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          FilegateErrorCode.notADirectory,
+        ),
+      ),
+    );
+  });
+
+  test('listDirectoryFiles rejects empty directory paths', () {
+    expect(
+      () => const Filegate().listDirectoryFiles(''),
       throwsA(isA<ArgumentError>()),
     );
   });
