@@ -62,6 +62,10 @@ jobs:
         working-directory: example
         run: flutter test test/widget_test.dart
 
+      - name: Run example integration tests
+        working-directory: example
+        run: flutter test --timeout=20m integration_test/plugin_integration_test.dart
+
       - name: Build Android example
         working-directory: example
         run: flutter build apk --debug
@@ -95,6 +99,13 @@ jobs:
         working-directory: example
         run: flutter pub get
 
+      - name: Run package tests
+        run: flutter test
+
+      - name: Run example widget tests
+        working-directory: example
+        run: flutter test test/widget_test.dart
+
       - name: Build iOS example
         working-directory: example
         run: flutter build ios --no-codesign
@@ -105,7 +116,7 @@ jobs:
 
       - name: Run macOS integration tests
         working-directory: example
-        run: flutter test --timeout=20m integration_test/plugin_integration_test.dart
+        run: flutter test --timeout=20m integration_test/plugin_integration_test.dart -d macos
 
   windows:
     name: Windows
@@ -133,6 +144,13 @@ jobs:
         working-directory: example
         run: flutter pub get
 
+      - name: Run package tests
+        run: flutter test
+
+      - name: Run example widget tests
+        working-directory: example
+        run: flutter test test/widget_test.dart
+
       - name: Build Windows example
         working-directory: example
         run: flutter build windows
@@ -140,6 +158,10 @@ jobs:
       - name: Run Windows native tests
         working-directory: example/build/windows/x64/plugins/filegate
         run: ctest -C Release --output-on-failure --no-tests=error
+
+      - name: Run Windows integration tests
+        working-directory: example
+        run: flutter test --timeout=20m integration_test/plugin_integration_test.dart -d windows
 
   linux:
     name: Linux
@@ -154,7 +176,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake libgtk-3-dev ninja-build pkg-config
+          sudo apt-get install -y clang cmake libgtk-3-dev ninja-build pkg-config xvfb
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -175,6 +197,13 @@ jobs:
         working-directory: example
         run: flutter pub get
 
+      - name: Run package tests
+        run: flutter test
+
+      - name: Run example widget tests
+        working-directory: example
+        run: flutter test test/widget_test.dart
+
       - name: Build Linux example
         working-directory: example
         run: flutter build linux
@@ -182,3 +211,7 @@ jobs:
       - name: Run Linux native tests
         working-directory: example/build/linux/x64/release/plugins/filegate
         run: ctest --output-on-failure --no-tests=error
+
+      - name: Run Linux integration tests
+        working-directory: example
+        run: xvfb-run -a flutter test --timeout=20m integration_test/plugin_integration_test.dart -d linux
