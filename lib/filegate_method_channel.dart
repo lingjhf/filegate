@@ -10,7 +10,11 @@ import 'src/models.dart';
 
 /// An implementation of [FilegatePlatform] that uses method channels.
 class MethodChannelFilegate extends FilegatePlatform {
+  MethodChannelFilegate({@visibleForTesting bool forceNativeRead = false})
+    : _forceNativeRead = forceNativeRead;
+
   static const _readChannelPrefix = 'filegate/read';
+  final bool _forceNativeRead;
 
   @visibleForTesting
   final methodChannel = const MethodChannel('filegate');
@@ -67,8 +71,8 @@ class MethodChannelFilegate extends FilegatePlatform {
       throw ArgumentError.value(start, 'start', 'start must not be negative');
     }
 
-    if ((Platform.isMacOS || Platform.isWindows || Platform.isLinux) &&
-        File(path).existsSync()) {
+    if (!_forceNativeRead &&
+        (Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
       return _openDesktopRead(path, chunkSize: chunkSize, start: start);
     }
 
@@ -194,6 +198,22 @@ class MethodChannelFilegate extends FilegatePlatform {
 
     controller.onListen = () async {
       try {
+        final type = FileSystemEntity.typeSync(path);
+        if (type == FileSystemEntityType.notFound) {
+          throw PlatformException(
+            code: 'path_not_found',
+            message: 'The provided path does not exist.',
+            details: path,
+          );
+        }
+        if (type == FileSystemEntityType.directory) {
+          throw PlatformException(
+            code: 'not_a_file',
+            message: 'The provided path is a directory, not a file.',
+            details: path,
+          );
+        }
+
         file = await File(path).open();
         final length = await file!.length();
         if (start > length) {

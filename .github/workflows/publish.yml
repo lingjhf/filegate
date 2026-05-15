@@ -80,7 +80,7 @@ jobs:
 
       - name: Run macOS integration tests
         working-directory: example
-        run: flutter test --timeout=20m integration_test/plugin_integration_test.dart
+        run: flutter test --timeout=20m integration_test/plugin_integration_test.dart -d macos
 
   validate-windows:
     name: Validate Windows release

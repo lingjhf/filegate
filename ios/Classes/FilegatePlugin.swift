@@ -46,6 +46,10 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
 
     let fileURL = resolveURL(from: path)
     let temporaryAccess = fileURL.startAccessingSecurityScopedResource()
+    if !temporaryAccess && !FileManager.default.fileExists(atPath: fileURL.path) {
+      result(FlutterError(code: "path_not_found", message: "The provided path does not exist.", details: path))
+      return
+    }
     if !temporaryAccess && !FileManager.default.isReadableFile(atPath: fileURL.path) {
       result(FlutterError(code: "security_scope_failed", message: "Unable to access the selected file in the current session.", details: path))
       return
@@ -139,22 +143,31 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     }
 
     let fileURL = resolveURL(from: path)
+    let streamId = UUID().uuidString
+    let eventChannel = FlutterEventChannel(name: "filegate/read/\(streamId)", binaryMessenger: messenger)
+    let temporaryAccess = fileURL.startAccessingSecurityScopedResource()
+    if !temporaryAccess && !FileManager.default.fileExists(atPath: fileURL.path) {
+      result(FlutterError(code: "path_not_found", message: "The provided path does not exist.", details: path))
+      return
+    }
+    if !temporaryAccess && !FileManager.default.isReadableFile(atPath: fileURL.path) {
+      result(FlutterError(code: "security_scope_failed", message: "Unable to access the selected file in the current session.", details: path))
+      return
+    }
     do {
       let resourceValues = try fileURL.resourceValues(forKeys: [.isDirectoryKey])
       if resourceValues.isDirectory == true {
+        if temporaryAccess {
+          fileURL.stopAccessingSecurityScopedResource()
+        }
         result(FlutterError(code: "not_a_file", message: "The provided path is a directory, not a file.", details: path))
         return
       }
     } catch {
+      if temporaryAccess {
+        fileURL.stopAccessingSecurityScopedResource()
+      }
       result(FlutterError(code: "path_not_found", message: "The provided path does not exist.", details: path))
-      return
-    }
-
-    let streamId = UUID().uuidString
-    let eventChannel = FlutterEventChannel(name: "filegate/read/\(streamId)", binaryMessenger: messenger)
-    let temporaryAccess = fileURL.startAccessingSecurityScopedResource()
-    if !temporaryAccess && !FileManager.default.isReadableFile(atPath: fileURL.path) {
-      result(FlutterError(code: "security_scope_failed", message: "Unable to access the selected file in the current session.", details: path))
       return
     }
 

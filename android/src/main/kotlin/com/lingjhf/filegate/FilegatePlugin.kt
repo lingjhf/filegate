@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -32,6 +34,7 @@ class FilegatePlugin :
     private lateinit var applicationContext: Context
     private lateinit var messenger: io.flutter.plugin.common.BinaryMessenger
     private lateinit var channel: MethodChannel
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var activity: Activity? = null
     private var activityBinding: ActivityPluginBinding? = null
     private val readChannels = mutableMapOf<String, EventChannel>()
@@ -205,7 +208,7 @@ class FilegatePlugin :
             val handler = FileReadStreamHandler(
                 openStream = { openInputStream(path, start) },
                 chunkSize = chunkSize,
-                onDispose = { releaseReadStream(streamId) }
+                onDispose = { runOnMainThread { releaseReadStream(streamId) } }
             )
             eventChannel.setStreamHandler(handler)
             readChannels[streamId] = eventChannel
@@ -257,6 +260,14 @@ class FilegatePlugin :
     private fun releaseReadStream(streamId: String) {
         readHandlers.remove(streamId)?.cancel()
         readChannels.remove(streamId)?.setStreamHandler(null)
+    }
+
+    private fun runOnMainThread(action: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            action()
+            return
+        }
+        mainHandler.post(action)
     }
 
     private fun buildOpenDocumentIntent(

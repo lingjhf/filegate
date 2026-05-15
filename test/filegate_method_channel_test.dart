@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,7 +9,10 @@ import 'package:filegate/filegate.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  final MethodChannelFilegate platform = MethodChannelFilegate();
+  final MethodChannelFilegate platform = MethodChannelFilegate(
+    forceNativeRead: true,
+  );
+  final MethodChannelFilegate desktopPlatform = MethodChannelFilegate();
   const MethodChannel channel = MethodChannel('filegate');
   final List<MethodCall> methodCalls = <MethodCall>[];
   String startReadResponse = 'stream-1';
@@ -234,5 +238,45 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('openRead reports desktop directory paths as not_a_file', () async {
+    final directory = Directory.systemTemp.createTempSync('filegate-test-');
+    addTearDown(() {
+      directory.deleteSync(recursive: true);
+    });
+
+    final session = desktopPlatform.openRead(directory.path);
+
+    await expectLater(
+      session.stream.drain<void>(),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          'not_a_file',
+        ),
+      ),
+    );
+    expect(methodCalls.where((call) => call.method == 'startRead'), isEmpty);
+  });
+
+  test('openRead reports missing desktop paths as path_not_found', () async {
+    final path =
+        '${Directory.systemTemp.path}/filegate-missing-${DateTime.now().microsecondsSinceEpoch}';
+
+    final session = desktopPlatform.openRead(path);
+
+    await expectLater(
+      session.stream.drain<void>(),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          'path_not_found',
+        ),
+      ),
+    );
+    expect(methodCalls.where((call) => call.method == 'startRead'), isEmpty);
   });
 }
