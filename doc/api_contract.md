@@ -9,7 +9,8 @@ semantics below unless a future changelog calls out a breaking change.
 - `pickFiles()` returns selected files or `null` when the picker is cancelled.
 - `pickDirectoryFiles()` returns files found inside the selected directory.
   Returned entries should include `relativePath` when the platform can provide
-  a stable path relative to the selected root.
+  a stable path relative to the selected root, without prefixing the selected
+  root directory name.
 - `pickMixed()` returns both files and directory contents on platforms whose
   native picker supports mixed selection. Android, Windows, and Linux return
   `FilegateErrorCode.unsupportedMode`.

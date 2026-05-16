@@ -130,7 +130,6 @@ void AppendDirectoryFiles(EncodableList* entries,
                           const fs::path& directory,
                           bool recursive,
                           const std::vector<std::string>& extensions) {
-  const std::string root_name = directory.filename().u8string();
   if (recursive) {
     for (const fs::directory_entry& entry :
          fs::recursive_directory_iterator(directory)) {
@@ -140,9 +139,7 @@ void AppendDirectoryFiles(EncodableList* entries,
       if (!MatchesAllowedExtensions(entry.path(), extensions)) {
         continue;
       }
-      std::string relative =
-          (fs::path(root_name) / fs::relative(entry.path(), directory))
-              .u8string();
+      std::string relative = fs::relative(entry.path(), directory).u8string();
       entries->push_back(SerializeFileEntry(entry.path(), relative));
     }
     return;
@@ -155,8 +152,7 @@ void AppendDirectoryFiles(EncodableList* entries,
     if (!MatchesAllowedExtensions(entry.path(), extensions)) {
       continue;
     }
-    std::string relative = (fs::path(root_name) / entry.path().filename())
-                               .u8string();
+    std::string relative = entry.path().filename().u8string();
     entries->push_back(SerializeFileEntry(entry.path(), relative));
   }
 }

@@ -22,9 +22,13 @@ if flutter pub publish --dry-run >"$publish_output" 2>&1; then
   cat "$publish_output"
 else
   cat "$publish_output"
-  if grep -q "checked-in files are modified in git" "$publish_output" &&
-    grep -q "Package has 1 warning." "$publish_output"; then
+  if grep -Fq "checked-in files are modified in git" "$publish_output" &&
+    grep -Fq "Package has 1 warning." "$publish_output"; then
     echo "Ignoring expected dirty git warning during pre-commit dry-run."
+  elif grep -Fq "checked-in files are modified in git" "$publish_output" &&
+    grep -Fq "It seems you are not publishing an incremental update." "$publish_output" &&
+    grep -Fq "Package has 1 warning and 1 hint." "$publish_output"; then
+    echo "Ignoring expected dirty git warning and unpublished-version hint during pre-commit dry-run."
   else
     rm -f "$publish_output"
     exit 1

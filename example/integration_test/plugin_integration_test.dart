@@ -87,7 +87,7 @@ void main() {
     );
     await _pumpFrames(tester);
     expect(find.text('2 file(s) found'), findsOneWidget);
-    expect(find.text('project/README.md'), findsOneWidget);
+    expect(find.text('README.md'), findsOneWidget);
   });
 
   testWidgets('read page previews selected file bytes', (
@@ -263,13 +263,13 @@ class _FakeFilegate extends Filegate {
         path: '/tmp/project/README.md',
         name: 'README.md',
         kind: PickedEntryKind.file,
-        relativePath: 'project/README.md',
+        relativePath: 'README.md',
       ),
       PickedEntry(
         path: '/tmp/project/config.json',
         name: 'config.json',
         kind: PickedEntryKind.file,
-        relativePath: 'project/config.json',
+        relativePath: 'config.json',
       ),
     ];
   }

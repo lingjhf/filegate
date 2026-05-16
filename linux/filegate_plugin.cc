@@ -119,7 +119,9 @@ bool append_directory_files(FlValue* entries,
     g_autofree gchar* child_path =
         g_build_filename(directory_path, child_name, nullptr);
     g_autofree gchar* child_relative =
-        g_build_filename(relative_prefix, child_name, nullptr);
+        relative_prefix != nullptr && strlen(relative_prefix) > 0
+            ? g_build_filename(relative_prefix, child_name, nullptr)
+            : g_strdup(child_name);
 
     if (g_file_test(child_path, G_FILE_TEST_IS_DIR)) {
       if (recursive && !append_directory_files(entries, child_path,
@@ -240,9 +242,8 @@ FlMethodResponse* filegate_pick_files(FlValue* arguments) {
       g_object_unref(dialog);
       return FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
     }
-    g_autofree gchar* root_name = g_path_get_basename(directory_path);
     g_autoptr(GError) error = nullptr;
-    if (!append_directory_files(entries, directory_path, root_name, recursive,
+    if (!append_directory_files(entries, directory_path, "", recursive,
                                 extensions, &error)) {
       g_object_unref(dialog);
       return FL_METHOD_RESPONSE(fl_method_error_response_new(

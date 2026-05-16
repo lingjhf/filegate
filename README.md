@@ -212,7 +212,8 @@ Fields:
 - `path`: Platform path or URI.
 - `name`: Display name.
 - `kind`: `PickedEntryKind.file` or `PickedEntryKind.directory`.
-- `relativePath`: Relative path when enumerating directory contents.
+- `relativePath`: Path relative to the selected or listed directory when
+  enumerating directory contents.
 - `metadata`: Optional `PickedEntryMetadata` supplied by native payloads or
   application code.
 

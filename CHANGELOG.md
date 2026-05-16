@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 1.0.2 - 2026-05-16
+
+### Fixed
+
+- Aligned native directory enumeration across Android, iOS, macOS, Windows,
+  and Linux so returned `relativePath` values are relative to the selected
+  root directory instead of being prefixed by the root directory name.
+
+### Changed
+
+- Updated example and integration test expectations to document root-relative
+  directory paths.
+- Clarified the local release validation script's handling of pub.dev dry-run
+  hints when local release commits have not been published.
+
 ## 1.0.1 - 2026-05-16
 
 ### Fixed

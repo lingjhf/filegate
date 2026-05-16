@@ -25,7 +25,12 @@ void main() {
   setUp(() {
     methodCalls.clear();
     pickResponse = [
-      {'path': '/tmp/example.txt', 'name': 'example.txt', 'kind': 'file'},
+      {
+        'path': '/tmp/example.txt',
+        'name': 'example.txt',
+        'kind': 'file',
+        'relativePath': 'nested/example.txt',
+      },
     ];
     startReadResponse = 'stream-1';
     eventPayload = Uint8List.fromList(const [1, 2, 3]);
@@ -99,6 +104,7 @@ void main() {
     expect(result, hasLength(1));
     expect(result!.single.name, 'example.txt');
     expect(result.single.kind, PickedEntryKind.file);
+    expect(result.single.relativePath, 'nested/example.txt');
     expect(
       methodCalls.firstWhere((call) => call.method == 'pick').arguments,
       containsPair('persistAccess', false),

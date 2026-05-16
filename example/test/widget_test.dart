@@ -118,7 +118,7 @@ class _FakeFilegate extends Filegate {
         path: '/tmp/project/README.md',
         name: 'README.md',
         kind: PickedEntryKind.file,
-        relativePath: 'project/README.md',
+        relativePath: 'README.md',
       ),
     ];
   }

@@ -374,8 +374,7 @@ class FilegatePlugin :
         }
 
         val entries = mutableListOf<Map<String, Any?>>()
-        val rootName = root.name ?: queryDisplayName(treeUri) ?: treeUri.lastPathSegment ?: treeUri.toString()
-        collectFilesFromDirectory(root, recursive, allowedExtensions, entries, rootName)
+        collectFilesFromDirectory(root, recursive, allowedExtensions, entries, "")
         return entries
     }
 
@@ -390,22 +389,31 @@ class FilegatePlugin :
             when {
                 child.isDirectory && recursive -> {
                     val childName = child.name ?: child.uri.lastPathSegment ?: child.uri.toString()
+                    val childRelativePath = joinRelativePath(currentRelativePath, childName)
                     collectFilesFromDirectory(
                         child,
                         true,
                         allowedExtensions,
                         destination,
-                        "$currentRelativePath/$childName"
+                        childRelativePath
                     )
                 }
                 child.isFile -> {
                     val name = child.name ?: child.uri.lastPathSegment ?: child.uri.toString()
                     if (matchesAllowedExtensions(name, allowedExtensions)) {
-                        destination += serializeFileEntry(child.uri, name, "$currentRelativePath/$name")
+                        destination += serializeFileEntry(
+                            child.uri,
+                            name,
+                            joinRelativePath(currentRelativePath, name)
+                        )
                     }
                 }
             }
         }
+    }
+
+    private fun joinRelativePath(prefix: String, name: String): String {
+        return if (prefix.isEmpty()) name else "$prefix/$name"
     }
 
     private fun serializeFileEntry(uri: Uri, name: String, relativePath: String = name): Map<String, Any?> {

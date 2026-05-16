@@ -233,7 +233,6 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
     allowedExtensions: [String]
   ) throws -> [[String: Any]] {
     let keys: [URLResourceKey] = [.isDirectoryKey, .nameKey]
-    let rootName = directoryURL.lastPathComponent
     if recursive {
       guard let enumerator = FileManager.default.enumerator(
         at: directoryURL,
@@ -251,7 +250,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
         }
         if Self.matchesAllowedExtensions(url: fileURL, allowedExtensions: allowedExtensions) {
           let nestedPath = fileURL.path.replacingOccurrences(of: directoryURL.path + "/", with: "")
-          entries.append(Self.serializeEntry(fileURL, relativePath: rootName + "/" + nestedPath))
+          entries.append(Self.serializeEntry(fileURL, relativePath: nestedPath))
         }
       }
       return entries
@@ -271,7 +270,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
       guard Self.matchesAllowedExtensions(url: fileURL, allowedExtensions: allowedExtensions) else {
         return nil
       }
-      return Self.serializeEntry(fileURL, relativePath: rootName + "/" + fileURL.lastPathComponent)
+      return Self.serializeEntry(fileURL, relativePath: fileURL.lastPathComponent)
     }
   }
 

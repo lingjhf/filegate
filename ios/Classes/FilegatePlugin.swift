@@ -294,7 +294,6 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     allowedExtensions: [String]
   ) throws -> [[String: Any]] {
     let keys: [URLResourceKey] = [.isDirectoryKey, .nameKey]
-    let rootName = directoryURL.lastPathComponent
     if recursive {
       guard let enumerator = FileManager.default.enumerator(
         at: directoryURL,
@@ -312,7 +311,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
         }
         if matchesAllowedExtensions(url: fileURL, allowedExtensions: allowedExtensions) {
           let nestedPath = fileURL.path.replacingOccurrences(of: directoryURL.path + "/", with: "")
-          entries.append(serializeFileEntry(fileURL, relativePath: rootName + "/" + nestedPath))
+          entries.append(serializeFileEntry(fileURL, relativePath: nestedPath))
         }
       }
       return entries
@@ -332,7 +331,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       guard matchesAllowedExtensions(url: fileURL, allowedExtensions: allowedExtensions) else {
         return nil
       }
-      return serializeFileEntry(fileURL, relativePath: rootName + "/" + fileURL.lastPathComponent)
+      return serializeFileEntry(fileURL, relativePath: fileURL.lastPathComponent)
     }
   }
 
