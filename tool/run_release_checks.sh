@@ -12,6 +12,11 @@ flutter analyze
 flutter test --test-randomize-ordering-seed=random
 
 (
+  cd example/android
+  ./gradlew :filegate:testDebugUnitTest
+)
+
+(
   cd example
   flutter analyze
   flutter test test/widget_test.dart
@@ -23,10 +28,12 @@ if flutter pub publish --dry-run >"$publish_output" 2>&1; then
   cat "$publish_output"
 else
   cat "$publish_output"
-  if grep -Fq "checked-in files are modified in git" "$publish_output" &&
+  if (grep -Fq "checked-in files are modified in git" "$publish_output" ||
+    grep -Fq "checked-in file is modified in git" "$publish_output") &&
     grep -Fq "Package has 1 warning." "$publish_output"; then
     echo "Ignoring expected dirty git warning during pre-commit dry-run."
-  elif grep -Fq "checked-in files are modified in git" "$publish_output" &&
+  elif (grep -Fq "checked-in files are modified in git" "$publish_output" ||
+    grep -Fq "checked-in file is modified in git" "$publish_output") &&
     grep -Fq "It seems you are not publishing an incremental update." "$publish_output" &&
     grep -Fq "Package has 1 warning and 1 hint." "$publish_output"; then
     echo "Ignoring expected dirty git warning and unpublished-version hint during pre-commit dry-run."

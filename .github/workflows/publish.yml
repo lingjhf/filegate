@@ -53,6 +53,10 @@ jobs:
       - name: Run package tests
         run: flutter test
 
+      - name: Analyze example
+        working-directory: example
+        run: flutter analyze
+
       - name: Run example widget tests
         working-directory: example
         run: flutter test test/widget_test.dart
@@ -115,6 +119,10 @@ jobs:
       - name: Run package tests
         run: flutter test
 
+      - name: Analyze example
+        working-directory: example
+        run: flutter analyze
+
       - name: Run Android native tests
         working-directory: example/android
         run: ./gradlew :filegate:testDebugUnitTest
@@ -176,6 +184,10 @@ jobs:
 
       - name: Run package tests
         run: flutter test
+
+      - name: Analyze example
+        working-directory: example
+        run: flutter analyze
 
       - name: Run example widget tests
         working-directory: example
@@ -241,6 +253,10 @@ jobs:
 
       - name: Run package tests
         run: flutter test
+
+      - name: Analyze example
+        working-directory: example
+        run: flutter analyze
 
       - name: Run example widget tests
         working-directory: example
