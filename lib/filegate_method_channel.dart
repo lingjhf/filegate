@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'filegate_platform_interface.dart';
+import 'src/errors.dart';
 import 'src/file_read_session.dart';
 import 'src/models.dart';
 
@@ -171,7 +172,7 @@ class MethodChannelFilegate extends FilegatePlatform {
 
           if (streamId == null || streamId!.isEmpty) {
             throw PlatformException(
-              code: 'missing_stream_id',
+              code: FilegateErrorCode.missingStreamId,
               message: 'Native reader did not return a stream identifier.',
             );
           }
@@ -205,7 +206,7 @@ class MethodChannelFilegate extends FilegatePlatform {
 
                   controller.addError(
                     PlatformException(
-                      code: 'invalid_chunk',
+                      code: FilegateErrorCode.invalidChunk,
                       message:
                           'Unexpected native chunk type: ${event.runtimeType}.',
                     ),
@@ -282,14 +283,14 @@ class MethodChannelFilegate extends FilegatePlatform {
         final type = FileSystemEntity.typeSync(path);
         if (type == FileSystemEntityType.notFound) {
           throw PlatformException(
-            code: 'path_not_found',
+            code: FilegateErrorCode.pathNotFound,
             message: 'The provided path does not exist.',
             details: path,
           );
         }
         if (type == FileSystemEntityType.directory) {
           throw PlatformException(
-            code: 'not_a_file',
+            code: FilegateErrorCode.notAFile,
             message: 'The provided path is a directory, not a file.',
             details: path,
           );

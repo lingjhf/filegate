@@ -263,5 +263,5 @@ available in `FilegateErrorCode`, including `invalid_args`,
 `unsupported_mode`, `no_activity`, `no_view_controller`, `picker_active`,
 `path_not_found`, `not_a_file`, `not_a_directory`, `permission_denied`,
 `persist_permission_failed`, `security_scope_failed`, `pick_failed`,
-`picker_failed`, `stream_active`, `read_open_failed`, `read_failed`, and
-`enumeration_failed`.
+`picker_failed`, `stream_active`, `missing_stream_id`, `invalid_chunk`,
+`read_open_failed`, `read_failed`, and `enumeration_failed`.

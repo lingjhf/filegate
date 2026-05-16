@@ -321,7 +321,13 @@ void main() {
 
       await expectLater(
         session.stream.drain<void>(),
-        throwsA(isA<PlatformException>()),
+        throwsA(
+          isA<PlatformException>().having(
+            (error) => error.code,
+            'code',
+            FilegateErrorCode.missingStreamId,
+          ),
+        ),
       );
     },
   );
@@ -333,7 +339,13 @@ void main() {
 
     await expectLater(
       session.stream.drain<void>(),
-      throwsA(isA<PlatformException>()),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          FilegateErrorCode.invalidChunk,
+        ),
+      ),
     );
     expect(
       methodCalls.where((call) => call.method == 'cancelRead'),

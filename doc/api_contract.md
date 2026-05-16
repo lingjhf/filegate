@@ -73,6 +73,8 @@ Native failures are surfaced as `PlatformException`s with
 - `pick_failed`
 - `picker_failed`
 - `stream_active`
+- `missing_stream_id`
+- `invalid_chunk`
 - `read_open_failed`
 - `read_failed`
 - `enumeration_failed`

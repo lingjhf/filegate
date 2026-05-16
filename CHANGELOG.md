@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.3.1 - 2026-05-16
+
+### Fixed
+
+- Added public `FilegateErrorCode` constants for stream protocol failures
+  (`missing_stream_id` and `invalid_chunk`) and used shared constants in
+  Dart-side platform errors.
+
 ## 1.3.0 - 2026-05-16
 
 ### Fixed

@@ -13,6 +13,8 @@ abstract final class FilegateErrorCode {
   static const pickFailed = 'pick_failed';
   static const pickerFailed = 'picker_failed';
   static const streamActive = 'stream_active';
+  static const missingStreamId = 'missing_stream_id';
+  static const invalidChunk = 'invalid_chunk';
   static const readOpenFailed = 'read_open_failed';
   static const readFailed = 'read_failed';
   static const enumerationFailed = 'enumeration_failed';

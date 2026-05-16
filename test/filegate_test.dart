@@ -361,6 +361,8 @@ void main() {
     expect(FilegateErrorCode.pickFailed, 'pick_failed');
     expect(FilegateErrorCode.pickerFailed, 'picker_failed');
     expect(FilegateErrorCode.streamActive, 'stream_active');
+    expect(FilegateErrorCode.missingStreamId, 'missing_stream_id');
+    expect(FilegateErrorCode.invalidChunk, 'invalid_chunk');
     expect(FilegateErrorCode.readOpenFailed, 'read_open_failed');
     expect(FilegateErrorCode.readFailed, 'read_failed');
     expect(FilegateErrorCode.enumerationFailed, 'enumeration_failed');
