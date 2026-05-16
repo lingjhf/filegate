@@ -13,4 +13,6 @@ Run this checklist before every version commit.
 7. Update `pubspec.yaml`, `CHANGELOG.md`, and public documentation.
 8. Commit the release as `release: filegate x.y.z`.
 
+The local release gate is captured in `tool/run_release_checks.sh`.
+
 Do not create a semver tag unless the package should be published to pub.dev.

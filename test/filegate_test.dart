@@ -83,6 +83,10 @@ class MockFilegatePlatform
 void main() {
   final FilegatePlatform initialPlatform = FilegatePlatform.instance;
 
+  tearDown(() {
+    FilegatePlatform.instance = initialPlatform;
+  });
+
   test('$MethodChannelFilegate is the default instance', () {
     expect(initialPlatform, isInstanceOf<MethodChannelFilegate>());
   });

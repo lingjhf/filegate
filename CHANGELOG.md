@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 1.0.1 - 2026-05-16
+
+### Fixed
+
+- Restored the default platform interface after each Dart unit test to keep
+  tests isolated under randomized execution order.
+- Replaced open-ended integration test settling with bounded frame pumps so
+  desktop test runners cannot hang during route animations.
+
+### Changed
+
+- Added a local release validation script that runs dependency resolution,
+  analysis, package tests, example tests, macOS integration tests, pub.dev
+  dry-run validation, and diff whitespace checks.
+- Allowed the validation script to tolerate pub.dev dry-run's expected dirty
+  git warning while release files are still uncommitted.
+
 ## 1.0.0 - 2026-05-16
 
 ### Changed
