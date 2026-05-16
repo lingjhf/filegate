@@ -340,7 +340,7 @@ class FilegatePlugin :
             data.data?.let(uris::add)
         }
 
-        return uris.mapNotNull { uri ->
+        return sortEntries(uris.mapNotNull { uri ->
             if (persistAccess) {
                 takePersistablePermission(data, uri)
             }
@@ -355,7 +355,7 @@ class FilegatePlugin :
                     metadata = metadataForDocument(document, uri)
                 )
             }
-        }
+        })
     }
 
     private fun handlePickedDirectory(
@@ -379,7 +379,7 @@ class FilegatePlugin :
 
         val entries = mutableListOf<Map<String, Any?>>()
         collectFilesFromDirectory(root, recursive, allowedExtensions, entries, "")
-        return entries
+        return sortEntries(entries)
     }
 
     private fun collectFilesFromDirectory(
@@ -419,6 +419,19 @@ class FilegatePlugin :
 
     private fun joinRelativePath(prefix: String, name: String): String {
         return if (prefix.isEmpty()) name else "$prefix/$name"
+    }
+
+    private fun sortEntries(entries: List<Map<String, Any?>>): List<Map<String, Any?>> {
+        return entries.sortedWith(
+            compareBy<Map<String, Any?>> {
+                ((it["relativePath"] as? String) ?: (it["name"] as? String) ?: "")
+                    .replace('\\', '/')
+            }.thenBy {
+                it["name"] as? String ?: ""
+            }.thenBy {
+                it["path"] as? String ?: ""
+            }
+        )
     }
 
     private fun serializeFileEntry(

@@ -226,7 +226,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
         entries.append(Self.serializeEntry(url))
       }
     }
-    return entries
+    return Self.sortedEntries(entries)
   }
 
   private func expandDirectory(
@@ -255,7 +255,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
           entries.append(Self.serializeEntry(fileURL, relativePath: nestedPath))
         }
       }
-      return entries
+      return Self.sortedEntries(entries)
     }
 
     let urls = try FileManager.default.contentsOfDirectory(
@@ -264,7 +264,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
       options: [.skipsPackageDescendants, .skipsHiddenFiles]
     )
 
-    return try urls.compactMap { fileURL in
+    let entries: [[String: Any]] = try urls.compactMap { fileURL -> [String: Any]? in
       let values = try fileURL.resourceValues(forKeys: Set(keys))
       guard values.isDirectory != true else {
         return nil
@@ -274,6 +274,32 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
       }
       return Self.serializeEntry(fileURL, relativePath: fileURL.lastPathComponent)
     }
+    return Self.sortedEntries(entries)
+  }
+
+  private static func sortedEntries(_ entries: [[String: Any]]) -> [[String: Any]] {
+    entries.sorted { left, right in
+      let leftKey = stableEntryKey(left)
+      let rightKey = stableEntryKey(right)
+      if leftKey != rightKey {
+        return leftKey < rightKey
+      }
+      let leftName = left["name"] as? String ?? ""
+      let rightName = right["name"] as? String ?? ""
+      if leftName != rightName {
+        return leftName < rightName
+      }
+      return (left["path"] as? String ?? "") < (right["path"] as? String ?? "")
+    }
+  }
+
+  private static func stableEntryKey(_ entry: [String: Any]) -> String {
+    let key =
+      (entry["relativePath"] as? String) ??
+      (entry["name"] as? String) ??
+      (entry["path"] as? String) ??
+      ""
+    return key.replacingOccurrences(of: "\\", with: "/")
   }
 
   private static func matchesAllowedExtensions(url: URL, allowedExtensions: [String]) -> Bool {

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.2.1 - 2026-05-16
+
+### Fixed
+
+- Sorted picker results by stable relative path/name/path keys after
+  native decoding and directory enumeration so result order is deterministic
+  across supported platforms.
+
 ## 1.2.0 - 2026-05-16
 
 ### Changed

@@ -97,7 +97,8 @@ class MethodChannelFilegate extends FilegatePlatform {
       uniqueEntries.putIfAbsent(decodedEntry.path, () => decodedEntry);
     }
 
-    return uniqueEntries.values.toList(growable: false);
+    return uniqueEntries.values.toList(growable: false)
+      ..sort(_comparePickedEntries);
   }
 
   @override
@@ -371,5 +372,23 @@ class MethodChannelFilegate extends FilegatePlatform {
       'value',
       'Expected a map from the native layer',
     );
+  }
+
+  static int _comparePickedEntries(PickedEntry left, PickedEntry right) {
+    final keyComparison = _pickedEntrySortKey(
+      left,
+    ).compareTo(_pickedEntrySortKey(right));
+    if (keyComparison != 0) {
+      return keyComparison;
+    }
+    final nameComparison = left.name.compareTo(right.name);
+    if (nameComparison != 0) {
+      return nameComparison;
+    }
+    return left.path.compareTo(right.path);
+  }
+
+  static String _pickedEntrySortKey(PickedEntry entry) {
+    return entry.relativePath?.replaceAll(r'\', '/') ?? entry.name;
   }
 }

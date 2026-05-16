@@ -198,6 +198,10 @@ Methods:
 - `listDirectoryFiles(String directoryPath, {bool recursive, List<String> allowedExtensions})`:
   Lists files from a known file-system directory without opening a picker.
 
+Picker results are deduplicated by platform path/URI and returned in
+deterministic relative path, name, then path order. Directory listing results
+use the same stable relative path ordering.
+
 ### FilegatePickOptions
 
 `persistAccess` defaults to `true` for picker helpers. On Android this asks the

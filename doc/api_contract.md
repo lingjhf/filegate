@@ -14,6 +14,8 @@ semantics below unless a future changelog calls out a breaking change.
 - `pickMixed()` returns selected files and files enumerated from selected
   directories on platforms whose native picker supports mixed selection.
   Android, Windows, and Linux return `FilegateErrorCode.unsupportedMode`.
+- Picker results are deduplicated by `PickedEntry.path` and sorted by
+  `relativePath`, then `name`, then `path`.
 - `FilegatePickOptions.persistAccess` defaults to `true`. Android uses it to
   request persisted Storage Access Framework URI permission when the system
   grants one. Other platforms may ignore the flag.

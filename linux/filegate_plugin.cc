@@ -151,13 +151,19 @@ bool append_directory_files(FlValue* entries,
   }
 
   const gchar* child_name = nullptr;
+  std::vector<std::string> child_names;
   while ((child_name = g_dir_read_name(directory)) != nullptr) {
+    child_names.emplace_back(child_name);
+  }
+  std::sort(child_names.begin(), child_names.end());
+
+  for (const std::string& name : child_names) {
     g_autofree gchar* child_path =
-        g_build_filename(directory_path, child_name, nullptr);
+        g_build_filename(directory_path, name.c_str(), nullptr);
     g_autofree gchar* child_relative =
         relative_prefix != nullptr && strlen(relative_prefix) > 0
-            ? g_build_filename(relative_prefix, child_name, nullptr)
-            : g_strdup(child_name);
+            ? g_build_filename(relative_prefix, name.c_str(), nullptr)
+            : g_strdup(name.c_str());
 
     if (g_file_test(child_path, G_FILE_TEST_IS_DIR)) {
       if (recursive && !append_directory_files(entries, child_path,
@@ -290,14 +296,20 @@ FlMethodResponse* filegate_pick_files(FlValue* arguments) {
     }
   } else {
     GSList* filenames = gtk_file_chooser_get_filenames(chooser);
+    std::vector<std::string> paths;
     for (GSList* item = filenames; item != nullptr; item = item->next) {
       gchar* path = static_cast<gchar*>(item->data);
-      if (matches_allowed_extensions(path, extensions)) {
-        fl_value_append_take(entries, serialize_file_entry(path, nullptr));
-      }
+      paths.emplace_back(path);
       g_free(path);
     }
     g_slist_free(filenames);
+    std::sort(paths.begin(), paths.end());
+    for (const std::string& path : paths) {
+      if (matches_allowed_extensions(path.c_str(), extensions)) {
+        fl_value_append_take(entries,
+                             serialize_file_entry(path.c_str(), nullptr));
+      }
+    }
   }
 
   g_object_unref(dialog);

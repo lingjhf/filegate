@@ -190,6 +190,59 @@ EncodableValue SerializeFileEntry(const fs::path& path,
   return EncodableValue(entry);
 }
 
+std::string EntryStringValue(const EncodableMap& entry, const char* key) {
+  const auto iterator = entry.find(EncodableValue(key));
+  if (iterator == entry.end()) {
+    return std::string();
+  }
+  const std::string* value = std::get_if<std::string>(&iterator->second);
+  return value == nullptr ? std::string() : *value;
+}
+
+std::string StableEntryKey(const EncodableValue& value) {
+  const EncodableMap* entry = std::get_if<EncodableMap>(&value);
+  if (entry == nullptr) {
+    return std::string();
+  }
+
+  std::string key = EntryStringValue(*entry, "relativePath");
+  if (key.empty()) {
+    key = EntryStringValue(*entry, "name");
+  }
+  if (key.empty()) {
+    key = EntryStringValue(*entry, "path");
+  }
+  std::replace(key.begin(), key.end(), '\\', '/');
+  return key;
+}
+
+std::string StableEntryPath(const EncodableValue& value) {
+  const EncodableMap* entry = std::get_if<EncodableMap>(&value);
+  return entry == nullptr ? std::string() : EntryStringValue(*entry, "path");
+}
+
+std::string StableEntryName(const EncodableValue& value) {
+  const EncodableMap* entry = std::get_if<EncodableMap>(&value);
+  return entry == nullptr ? std::string() : EntryStringValue(*entry, "name");
+}
+
+void SortEntries(EncodableList* entries) {
+  std::sort(entries->begin(), entries->end(),
+            [](const EncodableValue& left, const EncodableValue& right) {
+              const std::string left_key = StableEntryKey(left);
+              const std::string right_key = StableEntryKey(right);
+              if (left_key != right_key) {
+                return left_key < right_key;
+              }
+              const std::string left_name = StableEntryName(left);
+              const std::string right_name = StableEntryName(right);
+              if (left_name != right_name) {
+                return left_name < right_name;
+              }
+              return StableEntryPath(left) < StableEntryPath(right);
+            });
+}
+
 void AppendDirectoryFiles(EncodableList* entries,
                           const fs::path& directory,
                           bool recursive,
@@ -446,6 +499,7 @@ void FilegatePlugin::Pick(
   if (should_uninitialize) {
     CoUninitialize();
   }
+  SortEntries(&entries);
   result->Success(EncodableValue(entries));
 }
 

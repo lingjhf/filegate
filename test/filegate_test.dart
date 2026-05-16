@@ -703,8 +703,10 @@ void main() {
     await nested.create();
     final readme = File('${root.path}${Platform.pathSeparator}README.md');
     final notes = File('${nested.path}${Platform.pathSeparator}notes.TXT');
+    final zeta = File('${root.path}${Platform.pathSeparator}zeta.txt');
     await readme.writeAsString('readme');
     await notes.writeAsString('notes');
+    await zeta.writeAsString('zeta');
 
     const filegatePlugin = Filegate();
     final entries = await filegatePlugin.listDirectoryFiles(
@@ -713,11 +715,14 @@ void main() {
       allowedExtensions: const ['txt'],
     );
 
-    expect(entries, hasLength(1));
-    expect(entries.single.name, 'notes.TXT');
-    expect(entries.single.relativePath, 'nested/notes.TXT');
-    expect(entries.single.size, 5);
-    expect(entries.single.modifiedAt, isNotNull);
+    expect(entries, hasLength(2));
+    expect(entries.map((entry) => entry.relativePath), const [
+      'nested/notes.TXT',
+      'zeta.txt',
+    ]);
+    expect(entries.first.name, 'notes.TXT');
+    expect(entries.first.size, 5);
+    expect(entries.first.modifiedAt, isNotNull);
   });
 
   test('listDirectoryFiles reports missing and non-directory paths', () async {

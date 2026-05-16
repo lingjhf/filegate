@@ -123,6 +123,49 @@ void main() {
     );
   });
 
+  test('pick deduplicates entries and sorts them by stable path', () async {
+    pickResponse = [
+      {
+        'path': '/tmp/zeta.txt',
+        'name': 'zeta.txt',
+        'kind': 'file',
+        'relativePath': 'zeta.txt',
+      },
+      {
+        'path': '/tmp/alpha.txt',
+        'name': 'alpha.txt',
+        'kind': 'file',
+        'relativePath': 'alpha.txt',
+      },
+      {
+        'path': '/tmp/zeta.txt',
+        'name': 'ignored.txt',
+        'kind': 'file',
+        'relativePath': 'ignored.txt',
+      },
+      {
+        'path': '/tmp/beta.txt',
+        'name': 'beta.txt',
+        'kind': 'file',
+        'relativePath': 'nested/beta.txt',
+      },
+    ];
+
+    final result = await platform.pick(const FilegatePickOptions());
+
+    expect(result, hasLength(3));
+    expect(result!.map((entry) => entry.path), const [
+      '/tmp/alpha.txt',
+      '/tmp/beta.txt',
+      '/tmp/zeta.txt',
+    ]);
+    expect(result.map((entry) => entry.relativePath), const [
+      'alpha.txt',
+      'nested/beta.txt',
+      'zeta.txt',
+    ]);
+  });
+
   test('capabilities describe Android SAF limits', () {
     final capabilities = MethodChannelFilegate.capabilitiesForOperatingSystem(
       'android',

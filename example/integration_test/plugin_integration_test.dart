@@ -133,7 +133,11 @@ void main() {
       0x0a,
     ]);
     final file = File('${directory.path}${Platform.pathSeparator}sample.txt');
+    final alphaFile = File(
+      '${directory.path}${Platform.pathSeparator}alpha.txt',
+    );
     await file.writeAsBytes(bytes, flush: true);
+    await alphaFile.writeAsString('alpha', flush: true);
     final pickedFile = PickedEntry(
       path: file.path,
       name: 'sample.txt',
@@ -178,9 +182,12 @@ void main() {
     expect(rangeBytes.toList(), bytes.skip(4).take(4).toList());
 
     final listedFiles = await filegate.listDirectoryFiles(directory.path);
-    expect(listedFiles, hasLength(1));
-    expect(listedFiles.single.name, 'sample.txt');
-    expect(listedFiles.single.size, bytes.length);
+    expect(listedFiles, hasLength(2));
+    expect(listedFiles.map((entry) => entry.name), const [
+      'alpha.txt',
+      'sample.txt',
+    ]);
+    expect(listedFiles.last.size, bytes.length);
 
     final session = filegate.openRead(file.path, chunkSize: 4, start: 4);
     final chunks = await session.stream.toList();

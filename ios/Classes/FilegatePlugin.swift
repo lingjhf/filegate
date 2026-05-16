@@ -280,7 +280,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       }
     }
 
-    return Array(entriesByPath.values)
+    return sortedEntries(Array(entriesByPath.values))
   }
 
   private func expandDirectory(
@@ -309,7 +309,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
           entries.append(serializeFileEntry(fileURL, relativePath: nestedPath))
         }
       }
-      return entries
+      return sortedEntries(entries)
     }
 
     let urls = try FileManager.default.contentsOfDirectory(
@@ -318,7 +318,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       options: [.skipsHiddenFiles, .skipsPackageDescendants]
     )
 
-    return try urls.compactMap { fileURL in
+    let entries: [[String: Any]] = try urls.compactMap { fileURL -> [String: Any]? in
       let values = try fileURL.resourceValues(forKeys: Set(keys))
       guard values.isDirectory != true else {
         return nil
@@ -328,6 +328,32 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       }
       return serializeFileEntry(fileURL, relativePath: fileURL.lastPathComponent)
     }
+    return sortedEntries(entries)
+  }
+
+  private func sortedEntries(_ entries: [[String: Any]]) -> [[String: Any]] {
+    entries.sorted { left, right in
+      let leftKey = stableEntryKey(left)
+      let rightKey = stableEntryKey(right)
+      if leftKey != rightKey {
+        return leftKey < rightKey
+      }
+      let leftName = left["name"] as? String ?? ""
+      let rightName = right["name"] as? String ?? ""
+      if leftName != rightName {
+        return leftName < rightName
+      }
+      return (left["path"] as? String ?? "") < (right["path"] as? String ?? "")
+    }
+  }
+
+  private func stableEntryKey(_ entry: [String: Any]) -> String {
+    let key =
+      (entry["relativePath"] as? String) ??
+      (entry["name"] as? String) ??
+      (entry["path"] as? String) ??
+      ""
+    return key.replacingOccurrences(of: "\\", with: "/")
   }
 
   private func serializeFileEntry(_ url: URL, relativePath: String? = nil) -> [String: Any] {
