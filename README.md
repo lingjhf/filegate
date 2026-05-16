@@ -102,7 +102,7 @@ const filegate = Filegate();
 
 final files = await filegate.pickFiles(
   allowMultiple: true,
-  allowedExtensions: ['txt', 'json'],
+  allowedExtensions: ['txt', '.JSON'],
   persistAccess: true,
 );
 
@@ -203,6 +203,9 @@ Methods:
 `persistAccess` defaults to `true` for picker helpers. On Android this asks the
 Storage Access Framework to persist the selected URI permission when the system
 grants one. Set it to `false` for one-session access.
+
+`allowedExtensions` values are normalized before dispatch: whitespace is
+trimmed, leading dots are removed, case is ignored, and duplicates are dropped.
 
 ### PickedEntry
 

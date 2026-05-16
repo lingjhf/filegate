@@ -355,11 +355,12 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   }
 
   private func buildDocumentTypes(selectionMode: String, allowedExtensions: [String]) -> [String] {
+    let normalizedExtensions = normalizeExtensions(allowedExtensions)
     let fileTypes: [String]
-    if allowedExtensions.isEmpty {
+    if normalizedExtensions.isEmpty {
       fileTypes = [kUTTypeData as String]
     } else {
-      let mapped = allowedExtensions.compactMap { extensionValue -> String? in
+      let mapped = normalizedExtensions.compactMap { extensionValue -> String? in
         guard let unmanagedType = UTTypeCreatePreferredIdentifierForTag(
           kUTTagClassFilenameExtension,
           extensionValue as CFString,
@@ -383,10 +384,25 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   }
 
   private func matchesAllowedExtensions(url: URL, allowedExtensions: [String]) -> Bool {
-    guard !allowedExtensions.isEmpty else {
+    let normalizedExtensions = normalizeExtensions(allowedExtensions)
+    guard !normalizedExtensions.isEmpty else {
       return true
     }
-    return allowedExtensions.contains { $0.lowercased() == url.pathExtension.lowercased() }
+    return normalizedExtensions.contains(url.pathExtension.lowercased())
+  }
+
+  private func normalizeExtensions(_ extensions: [String]) -> [String] {
+    var seen = Set<String>()
+    var normalized: [String] = []
+    for value in extensions {
+      let extensionValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        .lowercased()
+      if !extensionValue.isEmpty && seen.insert(extensionValue).inserted {
+        normalized.append(extensionValue)
+      }
+    }
+    return normalized
   }
 
   private func metadataForFile(_ url: URL) -> [String: Any] {

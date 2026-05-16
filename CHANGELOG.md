@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.1.1 - 2026-05-16
+
+### Fixed
+
+- Normalized allowed file extensions consistently across Dart and native
+  picker paths by trimming whitespace, removing leading dots, lowercasing,
+  dropping empty values, and deduplicating entries.
+
 ## 1.1.0 - 2026-05-16
 
 ### Added

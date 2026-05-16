@@ -4,6 +4,7 @@
 #include <glib/gstdio.h>
 #include <gtk/gtk.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -52,6 +53,25 @@ bool lookup_bool(FlValue* map, const char* key, bool fallback) {
   return fl_value_get_bool(value);
 }
 
+std::string normalize_extension(const char* extension) {
+  if (extension == nullptr) {
+    return std::string();
+  }
+
+  g_autofree gchar* stripped = g_strdup(extension);
+  g_strstrip(stripped);
+  const gchar* without_dots = stripped;
+  while (*without_dots == '.') {
+    without_dots++;
+  }
+  if (strlen(without_dots) == 0) {
+    return std::string();
+  }
+
+  g_autofree gchar* lower = g_ascii_strdown(without_dots, -1);
+  return std::string(lower);
+}
+
 std::vector<std::string> lookup_extensions(FlValue* map) {
   std::vector<std::string> extensions;
   if (map == nullptr || fl_value_get_type(map) != FL_VALUE_TYPE_MAP) {
@@ -64,8 +84,11 @@ std::vector<std::string> lookup_extensions(FlValue* map) {
   for (size_t index = 0; index < fl_value_get_length(value); index++) {
     FlValue* item = fl_value_get_list_value(value, index);
     if (item != nullptr && fl_value_get_type(item) == FL_VALUE_TYPE_STRING) {
-      const char* extension = fl_value_get_string(item);
-      if (extension != nullptr && strlen(extension) > 0) {
+      const std::string extension =
+          normalize_extension(fl_value_get_string(item));
+      if (!extension.empty() &&
+          std::find(extensions.begin(), extensions.end(), extension) ==
+              extensions.end()) {
         extensions.emplace_back(extension);
       }
     }

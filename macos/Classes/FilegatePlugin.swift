@@ -91,8 +91,9 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
         panel.directoryURL = URL(fileURLWithPath: initialDirectory, isDirectory: true)
       }
 
-      if !allowedExtensions.isEmpty, selectionMode != "directoriesOnly" {
-        panel.allowedFileTypes = allowedExtensions
+      let normalizedExtensions = Self.normalizeExtensions(allowedExtensions)
+      if !normalizedExtensions.isEmpty, selectionMode != "directoriesOnly" {
+        panel.allowedFileTypes = normalizedExtensions
       }
 
       guard panel.runModal() == .OK else {
@@ -280,12 +281,27 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
   }
 
   private static func matchesAllowedExtensions(url: URL, allowedExtensions: [String]) -> Bool {
-    guard !allowedExtensions.isEmpty else {
+    let normalizedExtensions = normalizeExtensions(allowedExtensions)
+    guard !normalizedExtensions.isEmpty else {
       return true
     }
 
     let pathExtension = url.pathExtension.lowercased()
-    return allowedExtensions.contains { $0.lowercased() == pathExtension }
+    return normalizedExtensions.contains(pathExtension)
+  }
+
+  private static func normalizeExtensions(_ extensions: [String]) -> [String] {
+    var seen = Set<String>()
+    var normalized: [String] = []
+    for value in extensions {
+      let extensionValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        .lowercased()
+      if !extensionValue.isEmpty && seen.insert(extensionValue).inserted {
+        normalized.append(extensionValue)
+      }
+    }
+    return normalized
   }
 
   private static func metadataForFile(_ url: URL) -> [String: Any] {

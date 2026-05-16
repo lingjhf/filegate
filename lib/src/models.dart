@@ -131,6 +131,7 @@ class FilegatePickOptions {
       'allowedExtensions': allowedExtensions
           .map(_normalizeExtension)
           .where((extension) => extension.isNotEmpty)
+          .toSet()
           .toList(growable: false),
       'title': title,
       'initialDirectory': initialDirectory,
@@ -138,7 +139,9 @@ class FilegatePickOptions {
   }
 
   static String _normalizeExtension(String extension) {
-    return extension.startsWith('.') ? extension.substring(1) : extension;
+    final trimmed = extension.trim();
+    final withoutDots = trimmed.replaceFirst(RegExp(r'^\.+'), '');
+    return withoutDots.toLowerCase();
   }
 }
 

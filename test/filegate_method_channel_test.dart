@@ -117,6 +117,10 @@ void main() {
       methodCalls.firstWhere((call) => call.method == 'pick').arguments,
       containsPair('persistAccess', false),
     );
+    expect(
+      methodCalls.firstWhere((call) => call.method == 'pick').arguments,
+      containsPair('allowedExtensions', const ['txt']),
+    );
   });
 
   test('capabilities describe Android SAF limits', () {

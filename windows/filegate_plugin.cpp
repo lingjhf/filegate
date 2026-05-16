@@ -5,6 +5,8 @@
 #include <wrl/client.h>
 
 #include <chrono>
+#include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -64,6 +66,29 @@ const std::string* LookupString(const EncodableMap* map, const char* key) {
   return std::get_if<std::string>(&iterator->second);
 }
 
+std::string NormalizeExtension(std::string extension) {
+  const auto first = std::find_if_not(
+      extension.begin(), extension.end(),
+      [](unsigned char character) { return std::isspace(character); });
+  const auto last = std::find_if_not(
+      extension.rbegin(), extension.rend(),
+      [](unsigned char character) { return std::isspace(character); })
+                        .base();
+  if (first >= last) {
+    return std::string();
+  }
+
+  extension = std::string(first, last);
+  while (!extension.empty() && extension.front() == '.') {
+    extension.erase(extension.begin());
+  }
+  std::transform(extension.begin(), extension.end(), extension.begin(),
+                 [](unsigned char character) {
+                   return static_cast<char>(std::tolower(character));
+                 });
+  return extension;
+}
+
 bool LookupBool(const EncodableMap* map, const char* key, bool fallback) {
   if (map == nullptr) {
     return fallback;
@@ -91,8 +116,13 @@ std::vector<std::string> LookupExtensions(const EncodableMap* map) {
   }
   for (const EncodableValue& item : *list) {
     const std::string* extension = std::get_if<std::string>(&item);
-    if (extension != nullptr && !extension->empty()) {
-      extensions.push_back(*extension);
+    if (extension != nullptr) {
+      const std::string normalized = NormalizeExtension(*extension);
+      if (!normalized.empty() &&
+          std::find(extensions.begin(), extensions.end(), normalized) ==
+              extensions.end()) {
+        extensions.push_back(normalized);
+      }
     }
   }
   return extensions;

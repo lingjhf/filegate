@@ -477,12 +477,20 @@ class FilegatePlugin :
     }
 
     private fun matchesAllowedExtensions(name: String, allowedExtensions: List<String>): Boolean {
-        if (allowedExtensions.isEmpty()) {
+        val normalizedExtensions = allowedExtensions
+            .map(::normalizeExtension)
+            .filter { it.isNotEmpty() }
+            .toSet()
+        if (normalizedExtensions.isEmpty()) {
             return true
         }
 
         val extension = name.substringAfterLast('.', missingDelimiterValue = "").lowercase()
-        return allowedExtensions.any { it.lowercase() == extension }
+        return normalizedExtensions.contains(extension)
+    }
+
+    private fun normalizeExtension(extension: String): String {
+        return extension.trim().trimStart('.').lowercase()
     }
 
     private fun queryDisplayName(uri: Uri): String? {

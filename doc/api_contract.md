@@ -46,8 +46,8 @@ semantics below unless a future changelog calls out a breaking change.
 - `listDirectoryFiles()` lists files from a known file-system directory without
   opening a picker.
 - Returned entries are sorted by `relativePath`.
-- `allowedExtensions` are case-insensitive and may be supplied with or without
-  a leading dot.
+- `allowedExtensions` are trimmed, case-insensitive, deduplicated, and may be
+  supplied with or without a leading dot.
 - Symbolic links are not followed.
 
 ## Errors

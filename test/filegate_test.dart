@@ -494,7 +494,7 @@ void main() {
   test('pick options normalize recursive and extensions', () {
     const options = FilegatePickOptions(
       recursive: true,
-      allowedExtensions: ['.txt', 'yaml'],
+      allowedExtensions: [' .TXT ', 'yaml', '.yaml', '.', ''],
       persistAccess: false,
     );
 
