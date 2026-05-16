@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.3.3 - 2026-05-16
+
+### Fixed
+
+- Kept Android read event-channel handlers registered until Flutter
+  deactivates the stream, avoiding `MissingPluginException` after EOF while
+  still releasing file handles promptly.
+
 ## 1.3.2 - 2026-05-16
 
 ### Changed
@@ -21,8 +29,8 @@
 
 ### Fixed
 
-- Released Android native read channels after EOF and read-open failures
-  instead of waiting for a later cancel callback.
+- Released Android native file handles after EOF and read-open failures while
+  keeping stream channels available for Flutter deactivation.
 - Cancelled native read sessions when Dart receives invalid stream payloads
   or event-channel errors.
 
