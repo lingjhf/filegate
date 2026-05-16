@@ -1,4 +1,5 @@
 import Cocoa
+import CoreServices
 import FlutterMacOS
 
 public class FilegatePlugin: NSObject, FlutterPlugin {
@@ -197,12 +198,16 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
     let isDirectory = resourceValues?.isDirectory ?? false
     let name = resourceValues?.name ?? url.lastPathComponent
 
-    return [
+    var entry: [String: Any] = [
       "path": url.path,
       "name": name,
       "kind": isDirectory ? "directory" : "file",
       "relativePath": relativePath ?? name,
     ]
+    if !isDirectory {
+      entry["metadata"] = Self.metadataForFile(url)
+    }
+    return entry
   }
 
   private func resolvePickedEntries(
@@ -281,6 +286,36 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
 
     let pathExtension = url.pathExtension.lowercased()
     return allowedExtensions.contains { $0.lowercased() == pathExtension }
+  }
+
+  private static func metadataForFile(_ url: URL) -> [String: Any] {
+    var metadata: [String: Any] = [:]
+    let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+    if let size = values?.fileSize, size >= 0 {
+      metadata["size"] = size
+    }
+    if let modifiedAt = values?.contentModificationDate {
+      metadata["modifiedAt"] = Int(modifiedAt.timeIntervalSince1970 * 1000)
+    }
+    if let mimeType = mimeTypeForFile(url) {
+      metadata["mimeType"] = mimeType
+    }
+    return metadata
+  }
+
+  private static func mimeTypeForFile(_ url: URL) -> String? {
+    let pathExtension = url.pathExtension
+    guard !pathExtension.isEmpty,
+          let unmanagedType = UTTypeCreatePreferredIdentifierForTag(
+            kUTTagClassFilenameExtension,
+            pathExtension as CFString,
+            nil
+          ) else {
+      return nil
+    }
+
+    let type = unmanagedType.takeRetainedValue()
+    return UTTypeCopyPreferredTagWithClass(type, kUTTagClassMIMEType)?.takeRetainedValue() as String?
   }
 }
 

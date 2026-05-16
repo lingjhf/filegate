@@ -62,10 +62,21 @@ class _FilePickerExamplePageState extends State<FilePickerExamplePage> {
             ListTile(
               leading: const Icon(Icons.description),
               title: Text(entry.name),
-              subtitle: Text(entry.path),
+              subtitle: Text(_entrySubtitle(entry)),
             ),
         ],
       ),
     );
   }
+}
+
+String _entrySubtitle(PickedEntry entry) {
+  final parts = <String>[entry.path];
+  if (entry.size != null) {
+    parts.add('${entry.size} bytes');
+  }
+  if (entry.mimeType != null) {
+    parts.add(entry.mimeType!);
+  }
+  return parts.join(' | ');
 }

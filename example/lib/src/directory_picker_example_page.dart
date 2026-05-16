@@ -64,10 +64,21 @@ class _DirectoryPickerExamplePageState
             ListTile(
               leading: const Icon(Icons.insert_drive_file),
               title: Text(entry.relativePath ?? entry.name),
-              subtitle: Text(entry.path),
+              subtitle: Text(_entrySubtitle(entry)),
             ),
         ],
       ),
     );
   }
+}
+
+String _entrySubtitle(PickedEntry entry) {
+  final parts = <String>[entry.path];
+  if (entry.size != null) {
+    parts.add('${entry.size} bytes');
+  }
+  if (entry.mimeType != null) {
+    parts.add(entry.mimeType!);
+  }
+  return parts.join(' | ');
 }

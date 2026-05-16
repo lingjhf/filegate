@@ -4,6 +4,7 @@
 #include <shobjidl.h>
 #include <wrl/client.h>
 
+#include <chrono>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -114,16 +115,49 @@ bool MatchesAllowedExtensions(const fs::path& path,
   return false;
 }
 
+EncodableMap BuildMetadata(const fs::path& path) {
+  EncodableMap metadata;
+
+  std::error_code error;
+  const auto size = fs::file_size(path, error);
+  if (!error) {
+    metadata[EncodableValue("size")] =
+        EncodableValue(static_cast<int64_t>(size));
+  }
+
+  error.clear();
+  const auto modified_time = fs::last_write_time(path, error);
+  if (!error) {
+    const auto system_time = std::chrono::time_point_cast<
+        std::chrono::system_clock::duration>(
+        modified_time - fs::file_time_type::clock::now() +
+        std::chrono::system_clock::now());
+    const auto modified_at =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            system_time.time_since_epoch())
+            .count();
+    metadata[EncodableValue("modifiedAt")] =
+        EncodableValue(static_cast<int64_t>(modified_at));
+  }
+
+  return metadata;
+}
+
 EncodableValue SerializeFileEntry(const fs::path& path,
                                   const std::string& relative_path = "") {
   const std::string name = path.filename().u8string();
-  return EncodableValue(EncodableMap{
+  EncodableMap entry{
       {EncodableValue("path"), EncodableValue(path.u8string())},
       {EncodableValue("name"), EncodableValue(name)},
       {EncodableValue("kind"), EncodableValue("file")},
       {EncodableValue("relativePath"),
        EncodableValue(relative_path.empty() ? name : relative_path)},
-  });
+  };
+  EncodableMap metadata = BuildMetadata(path);
+  if (!metadata.empty()) {
+    entry[EncodableValue("metadata")] = EncodableValue(metadata);
+  }
+  return EncodableValue(entry);
 }
 
 void AppendDirectoryFiles(EncodableList* entries,

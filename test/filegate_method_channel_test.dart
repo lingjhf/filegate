@@ -30,6 +30,11 @@ void main() {
         'name': 'example.txt',
         'kind': 'file',
         'relativePath': 'nested/example.txt',
+        'metadata': {
+          'size': 12,
+          'modifiedAt': 1778893200000,
+          'mimeType': 'text/plain',
+        },
       },
     ];
     startReadResponse = 'stream-1';
@@ -105,6 +110,9 @@ void main() {
     expect(result!.single.name, 'example.txt');
     expect(result.single.kind, PickedEntryKind.file);
     expect(result.single.relativePath, 'nested/example.txt');
+    expect(result.single.size, 12);
+    expect(result.single.modifiedAt, DateTime.utc(2026, 5, 16, 1));
+    expect(result.single.mimeType, 'text/plain');
     expect(
       methodCalls.firstWhere((call) => call.method == 'pick').arguments,
       containsPair('persistAccess', false),

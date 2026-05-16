@@ -206,7 +206,8 @@ grants one. Set it to `false` for one-session access.
 
 ### PickedEntry
 
-`PickedEntry` describes a selected file or directory entry.
+`PickedEntry` describes a selected file or directory entry. Picker metadata is
+best effort and may be omitted when the platform cannot provide it.
 
 Fields:
 

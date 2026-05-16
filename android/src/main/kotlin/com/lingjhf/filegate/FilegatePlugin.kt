@@ -349,7 +349,11 @@ class FilegatePlugin :
             if (!matchesAllowedExtensions(name, allowedExtensions)) {
                 null
             } else {
-                serializeFileEntry(uri, name)
+                serializeFileEntry(
+                    uri,
+                    name,
+                    metadata = metadataForDocument(document, uri)
+                )
             }
         }
     }
@@ -404,7 +408,8 @@ class FilegatePlugin :
                         destination += serializeFileEntry(
                             child.uri,
                             name,
-                            joinRelativePath(currentRelativePath, name)
+                            joinRelativePath(currentRelativePath, name),
+                            metadataForDocument(child, child.uri)
                         )
                     }
                 }
@@ -416,13 +421,39 @@ class FilegatePlugin :
         return if (prefix.isEmpty()) name else "$prefix/$name"
     }
 
-    private fun serializeFileEntry(uri: Uri, name: String, relativePath: String = name): Map<String, Any?> {
+    private fun serializeFileEntry(
+        uri: Uri,
+        name: String,
+        relativePath: String = name,
+        metadata: Map<String, Any?> = emptyMap()
+    ): Map<String, Any?> {
         return mapOf(
             "path" to uri.toString(),
             "name" to name,
             "kind" to "file",
-            "relativePath" to relativePath
+            "relativePath" to relativePath,
+            "metadata" to metadata
         )
+    }
+
+    private fun metadataForDocument(document: DocumentFile?, uri: Uri): Map<String, Any?> {
+        val metadata = mutableMapOf<String, Any?>()
+        val length = document?.length() ?: -1L
+        if (length >= 0L) {
+            metadata["size"] = length
+        }
+
+        val modifiedAt = document?.lastModified() ?: 0L
+        if (modifiedAt > 0L) {
+            metadata["modifiedAt"] = modifiedAt
+        }
+
+        val mimeType = applicationContext.contentResolver.getType(uri)
+        if (!mimeType.isNullOrEmpty()) {
+            metadata["mimeType"] = mimeType
+        }
+
+        return metadata
     }
 
     private fun takePersistablePermission(intent: Intent, uri: Uri) {

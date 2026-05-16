@@ -75,6 +75,7 @@ void main() {
     await _pumpFrames(tester);
     expect(find.text('2 file(s) selected'), findsOneWidget);
     expect(find.text('notes.txt'), findsOneWidget);
+    expect(find.text('/tmp/notes.txt | 6 bytes | text/plain'), findsOneWidget);
 
     await tester.pageBack();
     await _pumpFrames(tester);
@@ -88,6 +89,10 @@ void main() {
     await _pumpFrames(tester);
     expect(find.text('2 file(s) found'), findsOneWidget);
     expect(find.text('README.md'), findsOneWidget);
+    expect(
+      find.text('/tmp/project/README.md | 10 bytes | text/markdown'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('read page previews selected file bytes', (
@@ -241,11 +246,13 @@ class _FakeFilegate extends Filegate {
         path: '/tmp/notes.txt',
         name: 'notes.txt',
         kind: PickedEntryKind.file,
+        metadata: PickedEntryMetadata(size: 6, mimeType: 'text/plain'),
       ),
       PickedEntry(
         path: '/tmp/config.json',
         name: 'config.json',
         kind: PickedEntryKind.file,
+        metadata: PickedEntryMetadata(size: 2, mimeType: 'application/json'),
       ),
     ];
   }
@@ -264,12 +271,14 @@ class _FakeFilegate extends Filegate {
         name: 'README.md',
         kind: PickedEntryKind.file,
         relativePath: 'README.md',
+        metadata: PickedEntryMetadata(size: 10, mimeType: 'text/markdown'),
       ),
       PickedEntry(
         path: '/tmp/project/config.json',
         name: 'config.json',
         kind: PickedEntryKind.file,
         relativePath: 'config.json',
+        metadata: PickedEntryMetadata(size: 2, mimeType: 'application/json'),
       ),
     ];
   }

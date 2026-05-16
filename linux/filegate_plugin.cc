@@ -4,6 +4,7 @@
 #include <glib/gstdio.h>
 #include <gtk/gtk.h>
 
+#include <cstdint>
 #include <cstring>
 #include <string>
 #include <sys/stat.h>
@@ -100,6 +101,18 @@ FlValue* serialize_file_entry(const char* path, const char* relative_path) {
   fl_value_set_string_take(
       entry, "relativePath",
       fl_value_new_string(relative_path != nullptr ? relative_path : basename));
+
+  GStatBuf stat_buffer = {};
+  if (g_stat(path, &stat_buffer) == 0) {
+    FlValue* metadata = fl_value_new_map();
+    fl_value_set_string_take(
+        metadata, "size", fl_value_new_int(stat_buffer.st_size));
+    fl_value_set_string_take(
+        metadata, "modifiedAt",
+        fl_value_new_int(static_cast<int64_t>(stat_buffer.st_mtime) * 1000));
+    fl_value_set_string_take(entry, "metadata", metadata);
+  }
+
   return entry;
 }
 

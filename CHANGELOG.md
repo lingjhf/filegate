@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.1.0 - 2026-05-16
+
+### Added
+
+- Populated best-effort picker metadata from native file entries across
+  Android, iOS, macOS, Windows, and Linux.
+- Displayed available picker metadata in the example app file and directory
+  picker pages.
+
 ## 1.0.3 - 2026-05-16
 
 ### Fixed

@@ -25,8 +25,9 @@ semantics below unless a future changelog calls out a breaking change.
   form.
 - `PickedEntry.fileSystemPath` is non-null for platform paths and `file:` URIs.
   It is null for identifiers that cannot be represented as a direct local path.
-- `PickedEntry.metadata` is best effort. Consumers should handle missing
-  `size`, `modifiedAt`, and `mimeType` values.
+- `PickedEntry.metadata` is best effort. Native pickers should include `size`,
+  `modifiedAt`, and `mimeType` when the platform exposes stable values.
+  Consumers should still handle missing values.
 
 ## Reading
 

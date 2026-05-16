@@ -341,6 +341,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       "name": url.lastPathComponent,
       "kind": "file",
       "relativePath": relativePath ?? url.lastPathComponent,
+      "metadata": metadataForFile(url),
     ]
   }
 
@@ -386,6 +387,36 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       return true
     }
     return allowedExtensions.contains { $0.lowercased() == url.pathExtension.lowercased() }
+  }
+
+  private func metadataForFile(_ url: URL) -> [String: Any] {
+    var metadata: [String: Any] = [:]
+    let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+    if let size = values?.fileSize, size >= 0 {
+      metadata["size"] = size
+    }
+    if let modifiedAt = values?.contentModificationDate {
+      metadata["modifiedAt"] = Int(modifiedAt.timeIntervalSince1970 * 1000)
+    }
+    if let mimeType = mimeTypeForFile(url) {
+      metadata["mimeType"] = mimeType
+    }
+    return metadata
+  }
+
+  private func mimeTypeForFile(_ url: URL) -> String? {
+    let pathExtension = url.pathExtension
+    guard !pathExtension.isEmpty,
+          let unmanagedType = UTTypeCreatePreferredIdentifierForTag(
+            kUTTagClassFilenameExtension,
+            pathExtension as CFString,
+            nil
+          ) else {
+      return nil
+    }
+
+    let type = unmanagedType.takeRetainedValue()
+    return UTTypeCopyPreferredTagWithClass(type, kUTTagClassMIMEType)?.takeRetainedValue() as String?
   }
 
   private func releaseReadStream(_ streamId: String) {
