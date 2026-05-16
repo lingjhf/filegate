@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.2.0 - 2026-05-16
+
+### Changed
+
+- Updated iOS and macOS mixed picking so selected directories are expanded into
+  matching file entries instead of being returned as directory entries.
+
 ## 1.1.1 - 2026-05-16
 
 ### Fixed

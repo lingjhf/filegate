@@ -221,11 +221,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
     for url in urls {
       let values = try url.resourceValues(forKeys: [.isDirectoryKey])
       if values.isDirectory == true {
-        if selectionMode == "filesAndDirectories" {
-          entries.append(Self.serializeEntry(url))
-        } else {
-          entries.append(contentsOf: try expandDirectory(at: url, recursive: recursive, allowedExtensions: allowedExtensions))
-        }
+        entries.append(contentsOf: try expandDirectory(at: url, recursive: recursive, allowedExtensions: allowedExtensions))
       } else if Self.matchesAllowedExtensions(url: url, allowedExtensions: allowedExtensions) {
         entries.append(Self.serializeEntry(url))
       }

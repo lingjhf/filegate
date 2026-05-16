@@ -260,11 +260,6 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     for url in urls {
       let values = try url.resourceValues(forKeys: [.isDirectoryKey])
       if values.isDirectory == true {
-        if selectionMode == "filesAndDirectories" {
-          entriesByPath[url.absoluteString] = serializeDirectoryEntry(url)
-          continue
-        }
-
         let scopeActive = url.startAccessingSecurityScopedResource()
         guard scopeActive || FileManager.default.isReadableFile(atPath: url.path) else {
           throw FilegateError(code: "security_scope_failed", message: "Unable to access the selected directory in the current session.", details: url.absoluteString)
@@ -342,15 +337,6 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       "kind": "file",
       "relativePath": relativePath ?? url.lastPathComponent,
       "metadata": metadataForFile(url),
-    ]
-  }
-
-  private func serializeDirectoryEntry(_ url: URL, relativePath: String? = nil) -> [String: Any] {
-    [
-      "path": url.absoluteString,
-      "name": url.lastPathComponent,
-      "kind": "directory",
-      "relativePath": relativePath ?? url.lastPathComponent,
     ]
   }
 
