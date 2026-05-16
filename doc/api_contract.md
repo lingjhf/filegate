@@ -42,6 +42,8 @@ semantics below unless a future changelog calls out a breaking change.
   large files or untrusted file sizes. `maxBytes`, when provided, must not be
   negative.
 - `cancel()` is idempotent. Consumers may call it after stream completion.
+- Native read resources are released after EOF, read-open failures, explicit
+  cancellation, or invalid event-channel payloads.
 
 ## Directory listing
 

@@ -210,8 +210,12 @@ class MethodChannelFilegate extends FilegatePlatform {
                           'Unexpected native chunk type: ${event.runtimeType}.',
                     ),
                   );
+                  unawaited(cancelOnce());
                 },
-                onError: controller.addError,
+                onError: (Object error, StackTrace stackTrace) {
+                  controller.addError(error, stackTrace);
+                  unawaited(cancelOnce());
+                },
                 onDone: () async {
                   await _closeController(
                     controller,

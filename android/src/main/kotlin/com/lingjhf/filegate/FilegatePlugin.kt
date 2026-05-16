@@ -695,16 +695,19 @@ class FilegatePlugin :
                     events.error(error.code, error.message, error.details)
                     events.endOfStream()
                     executor.shutdown()
+                    dispose()
                     return
                 } catch (error: SecurityException) {
                     events.error("permission_denied", error.localizedMessage, null)
                     events.endOfStream()
                     executor.shutdown()
+                    dispose()
                     return
                 } catch (error: Exception) {
                     events.error("read_open_failed", error.localizedMessage, null)
                     events.endOfStream()
                     executor.shutdown()
+                    dispose()
                     return
                 }
 
@@ -801,6 +804,7 @@ class FilegatePlugin :
             dispatchEvent {
                 if (!isCancelled) {
                     sink.endOfStream()
+                    dispose()
                 }
             }
         }

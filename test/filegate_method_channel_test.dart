@@ -335,6 +335,16 @@ void main() {
       session.stream.drain<void>(),
       throwsA(isA<PlatformException>()),
     );
+    expect(
+      methodCalls.where((call) => call.method == 'cancelRead'),
+      hasLength(1),
+    );
+
+    await session.cancel();
+    expect(
+      methodCalls.where((call) => call.method == 'cancelRead'),
+      hasLength(1),
+    );
   });
 
   test('openRead accepts native list chunks', () async {

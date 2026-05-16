@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.3.0 - 2026-05-16
+
+### Fixed
+
+- Released Android native read channels after EOF and read-open failures
+  instead of waiting for a later cancel callback.
+- Cancelled native read sessions when Dart receives invalid stream payloads
+  or event-channel errors.
+
 ## 1.2.1 - 2026-05-16
 
 ### Fixed

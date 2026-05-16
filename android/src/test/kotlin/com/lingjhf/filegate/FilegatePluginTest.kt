@@ -28,7 +28,7 @@ internal class FilegatePluginTest {
     }
 
     @Test
-    fun fileReadStreamHandler_keepsChannelUntilFlutterCancelsAfterEnd() {
+    fun fileReadStreamHandler_releasesChannelAfterEnd() {
         var disposeCount = 0
         val handler = FilegatePlugin.FileReadStreamHandler(
             openStream = { ByteArrayInputStream(byteArrayOf(1, 2, 3)) },
@@ -43,10 +43,28 @@ internal class FilegatePluginTest {
 
         assertTrue(sink.awaitEnd())
         assertEquals(listOf(listOf(1, 2), listOf(3)), sink.successEvents)
-        assertEquals(0, disposeCount)
+        assertEquals(1, disposeCount)
 
         handler.onCancel(null)
 
+        assertEquals(1, disposeCount)
+    }
+
+    @Test
+    fun fileReadStreamHandler_releasesChannelAfterOpenFailure() {
+        var disposeCount = 0
+        val handler = FilegatePlugin.FileReadStreamHandler(
+            openStream = { throw IllegalStateException("boom") },
+            chunkSize = 2,
+            maxBytes = null,
+            dispatchEvent = { action -> action() },
+            onDispose = { disposeCount += 1 }
+        )
+        val sink = RecordingEventSink()
+
+        handler.onListen(null, sink)
+
+        assertTrue(sink.awaitEnd())
         assertEquals(1, disposeCount)
     }
 
