@@ -13,6 +13,7 @@ flutter test --test-randomize-ordering-seed=random
 
 (
   cd example
+  flutter analyze
   flutter test test/widget_test.dart
   flutter test --timeout=20m integration_test/plugin_integration_test.dart -d macos
 )

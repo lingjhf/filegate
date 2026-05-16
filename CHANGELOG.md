@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.3.2 - 2026-05-16
+
+### Changed
+
+- Enabled strict Dart analyzer language checks for the plugin and example.
+- Added explicit example analysis to the local release validation script.
+
 ## 1.3.1 - 2026-05-16
 
 ### Fixed
