@@ -339,9 +339,27 @@ void main() {
     );
   });
 
-  test('error code constants include native picker failures', () {
+  test('error code constants include stable API contract values', () {
+    expect(FilegateErrorCode.invalidArgs, 'invalid_args');
+    expect(FilegateErrorCode.unsupportedMode, 'unsupported_mode');
+    expect(FilegateErrorCode.noActivity, 'no_activity');
+    expect(FilegateErrorCode.noViewController, 'no_view_controller');
+    expect(FilegateErrorCode.pickerActive, 'picker_active');
+    expect(FilegateErrorCode.pathNotFound, 'path_not_found');
+    expect(FilegateErrorCode.notAFile, 'not_a_file');
+    expect(FilegateErrorCode.notADirectory, 'not_a_directory');
+    expect(FilegateErrorCode.permissionDenied, 'permission_denied');
+    expect(
+      FilegateErrorCode.persistPermissionFailed,
+      'persist_permission_failed',
+    );
+    expect(FilegateErrorCode.securityScopeFailed, 'security_scope_failed');
     expect(FilegateErrorCode.pickFailed, 'pick_failed');
     expect(FilegateErrorCode.pickerFailed, 'picker_failed');
+    expect(FilegateErrorCode.streamActive, 'stream_active');
+    expect(FilegateErrorCode.readOpenFailed, 'read_open_failed');
+    expect(FilegateErrorCode.readFailed, 'read_failed');
+    expect(FilegateErrorCode.enumerationFailed, 'enumeration_failed');
   });
 
   test('openReadWithProgress wraps chunks with cumulative progress', () async {

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.0.0 - 2026-05-16
+
+### Changed
+
+- Promoted the validated API contract to the stable 1.0 release track.
+- Expanded release validation coverage for stable error codes and ranged
+  progress reads.
+
 ## 0.8.0 - 2026-05-16
 
 ### Added

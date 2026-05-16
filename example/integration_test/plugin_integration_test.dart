@@ -192,6 +192,21 @@ void main() {
       boundedChunks.expand((chunk) => chunk).toList(),
       bytes.skip(2).take(5).toList(),
     );
+
+    final progressSession = filegate.openReadWithProgress(
+      file.path,
+      chunkSize: 3,
+      start: 2,
+      end: 7,
+    );
+    final progressChunks = await progressSession.stream.toList();
+    expect(
+      progressChunks.expand((chunk) => chunk.data).toList(),
+      bytes.skip(2).take(5).toList(),
+    );
+    expect(progressChunks.last.bytesRead, 5);
+    expect(progressChunks.last.totalBytes, 5);
+    expect(progressChunks.last.progress, 1.0);
   });
 }
 

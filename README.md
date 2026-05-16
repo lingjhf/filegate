@@ -23,7 +23,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  filegate: ^0.8.0
+  filegate: ^1.0.0
 ```
 
 If you are using this repository directly:
@@ -249,6 +249,9 @@ Fields:
 ## Errors
 
 Native failures are surfaced as `PlatformException`s. Common error codes are
-available in `FilegateErrorCode`, including `invalid_args`, `unsupported_mode`,
-`permission_denied`, `path_not_found`, `not_a_file`, `pick_failed`,
-`picker_failed`, and `read_failed`.
+available in `FilegateErrorCode`, including `invalid_args`,
+`unsupported_mode`, `no_activity`, `no_view_controller`, `picker_active`,
+`path_not_found`, `not_a_file`, `not_a_directory`, `permission_denied`,
+`persist_permission_failed`, `security_scope_failed`, `pick_failed`,
+`picker_failed`, `stream_active`, `read_open_failed`, `read_failed`, and
+`enumeration_failed`.
