@@ -36,7 +36,8 @@ semantics below unless a future changelog calls out a breaking change.
 - `readByteRange(path, start: s, length: n)` reads at most `n` bytes using the
   same `[start, end)` semantics.
 - `readAllBytes()` is a convenience API for small files. Use `openRead()` for
-  large files or untrusted file sizes.
+  large files or untrusted file sizes. `maxBytes`, when provided, must not be
+  negative.
 - `cancel()` is idempotent. Consumers may call it after stream completion.
 
 ## Directory listing

@@ -297,6 +297,9 @@ class FileReadChunk {
     if (totalBytes == null || totalBytes <= 0) {
       return null;
     }
+    if (bytesRead >= totalBytes) {
+      return 1.0;
+    }
     return bytesRead / totalBytes;
   }
 }

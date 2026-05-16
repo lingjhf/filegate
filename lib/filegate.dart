@@ -104,7 +104,7 @@ class Filegate {
       int? totalBytes;
       try {
         totalBytes = _rangeTotalBytes(await getFileSize(path), start, end);
-      } on PlatformException {
+      } on Object {
         totalBytes = null;
       }
       var bytesRead = 0;
@@ -131,6 +131,12 @@ class Filegate {
     int start = 0,
     int? end,
   }) {
+    _validateOpenReadArguments(
+      path,
+      chunkSize: chunkSize,
+      start: start,
+      end: end,
+    );
     return FilegatePlatform.instance.openRead(
       path,
       chunkSize: chunkSize,
@@ -144,6 +150,14 @@ class Filegate {
     int chunkSize = 64 * 1024,
     int? maxBytes,
   }) async {
+    if (maxBytes != null && maxBytes < 0) {
+      throw ArgumentError.value(
+        maxBytes,
+        'maxBytes',
+        'maxBytes must not be negative',
+      );
+    }
+
     final session = openRead(path, chunkSize: chunkSize);
     final builder = BytesBuilder(copy: false);
 
@@ -290,6 +304,34 @@ class Filegate {
       (left, right) => left.relativePath!.compareTo(right.relativePath!),
     );
     return entries;
+  }
+}
+
+void _validateOpenReadArguments(
+  String path, {
+  required int chunkSize,
+  required int start,
+  required int? end,
+}) {
+  if (path.isEmpty) {
+    throw ArgumentError.value(path, 'path', 'path must not be empty');
+  }
+  if (chunkSize <= 0) {
+    throw ArgumentError.value(
+      chunkSize,
+      'chunkSize',
+      'chunkSize must be greater than zero',
+    );
+  }
+  if (start < 0) {
+    throw ArgumentError.value(start, 'start', 'start must not be negative');
+  }
+  if (end != null && end < start) {
+    throw ArgumentError.value(
+      end,
+      'end',
+      'end must be greater than or equal to start',
+    );
   }
 }
 

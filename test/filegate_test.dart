@@ -462,6 +462,35 @@ void main() {
     expect(events.single.data, Uint8List.fromList(const [1, 2, 3]));
   });
 
+  test(
+    'openReadWithProgress continues when getFileSize throws non-platform errors',
+    () async {
+      const filegatePlugin = Filegate();
+      final fakePlatform = MockFilegatePlatform()
+        ..getFileSizeError = StateError('size unavailable');
+      FilegatePlatform.instance = fakePlatform;
+
+      final events = await filegatePlugin
+          .openReadWithProgress('/tmp/example.txt')
+          .stream
+          .toList();
+
+      expect(events, hasLength(1));
+      expect(events.single.totalBytes, isNull);
+      expect(events.single.progress, isNull);
+    },
+  );
+
+  test('file read chunk progress is capped at complete', () {
+    final chunk = FileReadChunk(
+      data: Uint8List.fromList(const [1, 2, 3]),
+      bytesRead: 3,
+      totalBytes: 2,
+    );
+
+    expect(chunk.progress, 1.0);
+  });
+
   test('pick options normalize recursive and extensions', () {
     const options = FilegatePickOptions(
       recursive: true,
@@ -558,6 +587,21 @@ void main() {
     );
     expect(fakePlatform.cancelCount, 1);
   });
+
+  test(
+    'readAllBytes rejects negative maxBytes without opening a stream',
+    () async {
+      const filegatePlugin = Filegate();
+      final fakePlatform = MockFilegatePlatform();
+      FilegatePlatform.instance = fakePlatform;
+
+      await expectLater(
+        () => filegatePlugin.readAllBytes('/tmp/example.txt', maxBytes: -1),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(fakePlatform.openReadCount, 0);
+    },
+  );
 
   test(
     'readByteRange reads an exact range without explicit cancellation',
@@ -719,11 +763,31 @@ void main() {
 
   test('openRead rejects negative start offsets', () {
     const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    FilegatePlatform.instance = fakePlatform;
 
     expect(
       () => filegatePlugin.openRead('/tmp/example.txt', start: -1),
       throwsA(isA<ArgumentError>()),
     );
+    expect(fakePlatform.openReadCount, 0);
+  });
+
+  test('openRead validates public read arguments before platform calls', () {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    FilegatePlatform.instance = fakePlatform;
+
+    expect(() => filegatePlugin.openRead(''), throwsA(isA<ArgumentError>()));
+    expect(
+      () => filegatePlugin.openRead('/tmp/example.txt', chunkSize: 0),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => filegatePlugin.openRead('/tmp/example.txt', start: 2, end: 1),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(fakePlatform.openReadCount, 0);
   });
 
   test('openRead allows EOF offsets and returns an empty stream', () async {

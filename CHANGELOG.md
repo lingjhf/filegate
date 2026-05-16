@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 1.0.3 - 2026-05-16
+
+### Fixed
+
+- Added Dart-side validation for public read arguments before dispatching to
+  platform implementations.
+- Rejected negative `readAllBytes(maxBytes:)` values before opening a stream.
+- Kept `openReadWithProgress()` best-effort when file-size lookup fails with
+  non-platform errors.
+- Capped `FileReadChunk.progress` at `1.0` when a stream yields more bytes than
+  the reported total.
+
 ## 1.0.2 - 2026-05-16
 
 ### Fixed

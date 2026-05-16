@@ -191,7 +191,8 @@ Methods:
 - `openRead(String path, {int chunkSize, int start, int? end})`: Opens a
   cancellable byte stream. `start` is inclusive and `end` is exclusive.
 - `openReadWithProgress(String path, {int chunkSize, int start, int? end})`: Streams chunks with cumulative progress.
-- `readAllBytes(String path, {int chunkSize, int? maxBytes})`: Reads all bytes with an optional safety limit.
+- `readAllBytes(String path, {int chunkSize, int? maxBytes})`: Reads all bytes
+  with an optional non-negative safety limit.
 - `readByteRange(String path, {int start, int length, int chunkSize})`: Reads
   an exact byte range using the streamed reader.
 - `listDirectoryFiles(String directoryPath, {bool recursive, List<String> allowedExtensions})`:
