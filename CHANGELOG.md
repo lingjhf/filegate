@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- Prevented Dart read-session cancellation from hanging if `cancel()` is called
+  before the native `startRead` call returns a stream id.
+
 ## 1.3.3 - 2026-05-16
 
 ### Fixed

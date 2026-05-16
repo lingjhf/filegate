@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -21,6 +22,7 @@ class MockFilegatePlatform
   int? lastStart;
   int? lastEnd;
   Object? getFileSizeError;
+  Stream<Uint8List> Function()? openReadStream;
   FilegateCapabilities capabilities = const FilegateCapabilities(
     supportsFilePicking: true,
     supportsDirectoryPicking: true,
@@ -72,13 +74,15 @@ class MockFilegatePlatform
     }
 
     return FileReadSession<Uint8List>(
-      stream: Stream<Uint8List>.fromIterable(chunks),
+      stream: openReadStream?.call() ?? Stream<Uint8List>.fromIterable(chunks),
       onCancel: () async {
         cancelCount += 1;
       },
     );
   }
 }
+
+class BareFilegatePlatform extends FilegatePlatform {}
 
 void main() {
   final FilegatePlatform initialPlatform = FilegatePlatform.instance;
@@ -89,6 +93,27 @@ void main() {
 
   test('$MethodChannelFilegate is the default instance', () {
     expect(initialPlatform, isInstanceOf<MethodChannelFilegate>());
+  });
+
+  test('base platform methods fail when not implemented', () {
+    final platform = BareFilegatePlatform();
+
+    expect(
+      () => platform.getCapabilities(),
+      throwsA(isA<UnimplementedError>()),
+    );
+    expect(
+      () => platform.pick(const FilegatePickOptions()),
+      throwsA(isA<UnimplementedError>()),
+    );
+    expect(
+      () => platform.getFileSize('/tmp/example.txt'),
+      throwsA(isA<UnimplementedError>()),
+    );
+    expect(
+      () => platform.openRead('/tmp/example.txt'),
+      throwsA(isA<UnimplementedError>()),
+    );
   });
 
   test('pick delegates to the active platform', () async {
@@ -312,6 +337,19 @@ void main() {
       }),
       throwsA(isA<ArgumentError>()),
     );
+    expect(
+      () => PickedEntryMetadata.fromMap(const {'mimeType': 123}),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => PickedEntry.fromMap(const {
+        'path': '/tmp/example.txt',
+        'name': 'example.txt',
+        'kind': 'file',
+        'metadata': {'modifiedAt': 'not-a-date'},
+      }),
+      throwsA(isA<ArgumentError>()),
+    );
   });
 
   test('directory picked entry round-trips kind', () {
@@ -444,6 +482,24 @@ void main() {
     },
   );
 
+  test('openReadWithProgress reports zero totals past EOF', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform()
+      ..fileSize = 3
+      ..chunks = <Uint8List>[
+        Uint8List.fromList(const [1]),
+      ];
+    FilegatePlatform.instance = fakePlatform;
+
+    final events = await filegatePlugin
+        .openReadWithProgress('/tmp/example.txt', start: 4)
+        .stream
+        .toList();
+
+    expect(events.single.totalBytes, 0);
+    expect(events.single.progress, isNull);
+  });
+
   test('openReadWithProgress continues when getFileSize throws', () async {
     const filegatePlugin = Filegate();
     final fakePlatform = MockFilegatePlatform()
@@ -491,6 +547,16 @@ void main() {
     );
 
     expect(chunk.progress, 1.0);
+  });
+
+  test('file read chunk progress is null for zero totals', () {
+    final chunk = FileReadChunk(
+      data: Uint8List.fromList(const [1]),
+      bytesRead: 1,
+      totalBytes: 0,
+    );
+
+    expect(chunk.progress, isNull);
   });
 
   test('pick options normalize recursive and extensions', () {
@@ -590,6 +656,31 @@ void main() {
     expect(fakePlatform.cancelCount, 1);
   });
 
+  test('readAllBytes cancels the session when the stream fails', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform()
+      ..openReadStream = () async* {
+        yield Uint8List.fromList(const [1]);
+        throw PlatformException(
+          code: FilegateErrorCode.readFailed,
+          message: 'read failed',
+        );
+      };
+    FilegatePlatform.instance = fakePlatform;
+
+    await expectLater(
+      () => filegatePlugin.readAllBytes('/tmp/example.txt'),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          FilegateErrorCode.readFailed,
+        ),
+      ),
+    );
+    expect(fakePlatform.cancelCount, 1);
+  });
+
   test(
     'readAllBytes rejects negative maxBytes without opening a stream',
     () async {
@@ -644,6 +735,32 @@ void main() {
     );
 
     expect(fakePlatform.lastChunkSize, 2);
+  });
+
+  test('readByteRange cancels the session when the stream fails', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform()
+      ..openReadStream = () async* {
+        yield Uint8List.fromList(const [1]);
+        throw PlatformException(
+          code: FilegateErrorCode.readFailed,
+          message: 'read failed',
+        );
+      };
+    FilegatePlatform.instance = fakePlatform;
+
+    await expectLater(
+      () =>
+          filegatePlugin.readByteRange('/tmp/example.txt', start: 0, length: 3),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          FilegateErrorCode.readFailed,
+        ),
+      ),
+    );
+    expect(fakePlatform.cancelCount, 1);
   });
 
   test(
@@ -726,6 +843,30 @@ void main() {
     expect(entries.first.size, 5);
     expect(entries.first.modifiedAt, isNotNull);
   });
+
+  test(
+    'listDirectoryFiles skips nested files when recursive is false',
+    () async {
+      final root = await Directory.systemTemp.createTemp('filegate-list-');
+      addTearDown(() async {
+        if (await root.exists()) {
+          await root.delete(recursive: true);
+        }
+      });
+      final nested = Directory('${root.path}${Platform.pathSeparator}nested');
+      await nested.create();
+      final rootFile = File('${root.path}${Platform.pathSeparator}root.txt');
+      final nestedFile = File(
+        '${nested.path}${Platform.pathSeparator}nested.txt',
+      );
+      await rootFile.writeAsString('root');
+      await nestedFile.writeAsString('nested');
+
+      final entries = await const Filegate().listDirectoryFiles(root.path);
+
+      expect(entries.map((entry) => entry.relativePath), const ['root.txt']);
+    },
+  );
 
   test('listDirectoryFiles reports missing and non-directory paths', () async {
     final root = await Directory.systemTemp.createTemp('filegate-list-');

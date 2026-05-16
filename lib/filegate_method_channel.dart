@@ -154,21 +154,48 @@ class MethodChannelFilegate extends FilegatePlatform {
 
     StreamSubscription<dynamic>? subscription;
     String? streamId;
+    Future<String?>? startReadFuture;
     bool cancelled = false;
     bool closed = false;
     Future<void>? cancelFuture;
+    Future<void>? nativeCancelFuture;
 
     late final StreamController<Uint8List> controller;
     late final Future<void> Function() cancelOnce;
+    Future<void> cancelStartedRead() async {
+      final activeStreamId = streamId;
+      if (activeStreamId != null && activeStreamId.isNotEmpty) {
+        nativeCancelFuture ??= _cancelRead(activeStreamId);
+        await nativeCancelFuture;
+        return;
+      }
+
+      final pendingStartRead = startReadFuture;
+      if (pendingStartRead == null) {
+        return;
+      }
+
+      try {
+        final pendingStreamId = await pendingStartRead;
+        if (pendingStreamId != null && pendingStreamId.isNotEmpty) {
+          nativeCancelFuture ??= _cancelRead(pendingStreamId);
+          await nativeCancelFuture;
+        }
+      } on Object {
+        // If startRead itself failed, there is no native stream to cancel.
+      }
+    }
+
     controller = StreamController<Uint8List>(
       onListen: () async {
         try {
-          streamId = await methodChannel.invokeMethod<String>('startRead', {
+          startReadFuture = methodChannel.invokeMethod<String>('startRead', {
             'path': path,
             'chunkSize': chunkSize,
             'start': start,
             'end': end,
           });
+          streamId = await startReadFuture;
 
           if (streamId == null || streamId!.isEmpty) {
             throw PlatformException(
@@ -178,12 +205,7 @@ class MethodChannelFilegate extends FilegatePlatform {
           }
 
           if (cancelled) {
-            await _cancelRead(streamId!);
-            await _closeController(
-              controller,
-              alreadyClosed: () => closed,
-              onClose: () => closed = true,
-            );
+            await cancelStartedRead();
             return;
           }
 
@@ -226,7 +248,9 @@ class MethodChannelFilegate extends FilegatePlatform {
                 },
               );
         } catch (error, stackTrace) {
-          controller.addError(error, stackTrace);
+          if (!cancelled) {
+            controller.addError(error, stackTrace);
+          }
           await _closeController(
             controller,
             alreadyClosed: () => closed,
@@ -242,15 +266,19 @@ class MethodChannelFilegate extends FilegatePlatform {
     cancelOnce = () {
       return cancelFuture ??= () async {
         cancelled = true;
+        final hasStartedStream = subscription != null || streamId != null;
         await subscription?.cancel();
-        if (streamId != null && streamId!.isNotEmpty) {
-          await _cancelRead(streamId!);
-        }
-        await _closeController(
+        await cancelStartedRead();
+        final closeFuture = _closeController(
           controller,
           alreadyClosed: () => closed,
           onClose: () => closed = true,
         );
+        if (hasStartedStream) {
+          await closeFuture;
+        } else {
+          unawaited(closeFuture);
+        }
       }();
     };
 

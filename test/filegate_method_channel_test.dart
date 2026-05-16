@@ -17,7 +17,9 @@ void main() {
   final List<MethodCall> methodCalls = <MethodCall>[];
   Object? pickResponse;
   String startReadResponse = 'stream-1';
+  Completer<String>? startReadCompleter;
   Object? eventPayload = Uint8List.fromList(const [1, 2, 3]);
+  PlatformException? streamError;
   PlatformException? getFileSizeError;
   PlatformException? startReadError;
   bool cancelReadThrows = false;
@@ -38,7 +40,9 @@ void main() {
       },
     ];
     startReadResponse = 'stream-1';
+    startReadCompleter = null;
     eventPayload = Uint8List.fromList(const [1, 2, 3]);
+    streamError = null;
     getFileSizeError = null;
     startReadError = null;
     cancelReadThrows = false;
@@ -60,6 +64,9 @@ void main() {
             if (startReadError != null) {
               throw startReadError!;
             }
+            if (startReadCompleter != null) {
+              return startReadCompleter!.future;
+            }
             return startReadResponse;
           }
 
@@ -78,12 +85,26 @@ void main() {
           final codec = const StandardMethodCodec();
           final methodCall = codec.decodeMethodCall(message);
           if (methodCall.method == 'listen') {
-            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-                .handlePlatformMessage(
-                  'filegate/read/stream-1',
-                  codec.encodeSuccessEnvelope(eventPayload),
-                  (_) {},
-                );
+            final error = streamError;
+            if (error != null) {
+              TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+                  .handlePlatformMessage(
+                    'filegate/read/stream-1',
+                    codec.encodeErrorEnvelope(
+                      code: error.code,
+                      message: error.message,
+                      details: error.details,
+                    ),
+                    (_) {},
+                  );
+            } else {
+              TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+                  .handlePlatformMessage(
+                    'filegate/read/stream-1',
+                    codec.encodeSuccessEnvelope(eventPayload),
+                    (_) {},
+                  );
+            }
             TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
                 .handlePlatformMessage('filegate/read/stream-1', null, (_) {});
           }
@@ -265,6 +286,34 @@ void main() {
     );
   });
 
+  test(
+    'openRead cancels native reader when cancelled before stream id returns',
+    () async {
+      final completer = Completer<String>();
+      startReadCompleter = completer;
+      final session = platform.openRead('/tmp/example.txt');
+      final done = Completer<void>();
+      final subscription = session.stream.listen(
+        (_) {},
+        onError: done.completeError,
+        onDone: done.complete,
+      );
+
+      await Future<void>.delayed(Duration.zero);
+      final cancelFuture = session.cancel();
+      completer.complete('stream-1');
+      await cancelFuture;
+      await done.future.timeout(const Duration(seconds: 1));
+      await Future<void>.delayed(Duration.zero);
+      await subscription.cancel();
+
+      expect(
+        methodCalls.where((call) => call.method == 'cancelRead'),
+        hasLength(1),
+      );
+    },
+  );
+
   test('openRead delivers done to stream listeners', () async {
     final session = platform.openRead('/tmp/example.txt');
     final done = Completer<void>();
@@ -359,6 +408,36 @@ void main() {
     );
   });
 
+  test('openRead cancels native reads after event-channel errors', () async {
+    streamError = PlatformException(
+      code: FilegateErrorCode.readFailed,
+      message: 'read failed',
+    );
+
+    final session = platform.openRead('/tmp/example.txt');
+
+    await expectLater(
+      session.stream.drain<void>(),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          FilegateErrorCode.readFailed,
+        ),
+      ),
+    );
+    expect(
+      methodCalls.where((call) => call.method == 'cancelRead'),
+      hasLength(1),
+    );
+
+    await session.cancel();
+    expect(
+      methodCalls.where((call) => call.method == 'cancelRead'),
+      hasLength(1),
+    );
+  });
+
   test('openRead accepts native list chunks', () async {
     eventPayload = const <int>[4, 5, 6];
 
@@ -373,6 +452,17 @@ void main() {
   test('getFileSize decodes native values', () async {
     expect(await platform.getFileSize('/tmp/example.txt'), 123);
   });
+
+  test(
+    'getCapabilities returns capabilities for the current platform',
+    () async {
+      final capabilities = await desktopPlatform.getCapabilities();
+
+      expect(capabilities.supportsFilePicking, isA<bool>());
+      expect(capabilities.supportsDirectoryPicking, isA<bool>());
+      expect(capabilities.supportsNativeUriRead, isA<bool>());
+    },
+  );
 
   test('getFileSize surfaces native platform exceptions', () async {
     getFileSizeError = PlatformException(
