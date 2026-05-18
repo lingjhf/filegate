@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Added a direct file save API contract for writing in-memory bytes through
+  native save/export dialogs across supported platforms.
+
 ### Fixed
 
 - Prevented Dart read-session cancellation from hanging if `cancel()` is called

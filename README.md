@@ -1,10 +1,11 @@
 # filegate
 
-A Flutter plugin for native file picking and streamed file reading.
+A Flutter plugin for native file picking, direct file saving, and streamed file
+reading.
 
-The plugin exposes a Dart API for picking files or directory contents, querying
-file size, and reading files in chunks without loading the whole file into
-memory first.
+The plugin exposes a Dart API for picking files or directory contents, saving
+bytes through native save/export dialogs, querying file size, and reading files
+in chunks without loading the whole file into memory first.
 
 ## Supported platforms
 
@@ -16,6 +17,44 @@ memory first.
 
 All supported platforms provide native picker implementations. Desktop file
 reading for paths available to Dart uses `dart:io`.
+
+## Feature comparison
+
+Compared with this package (`filegate` 1.3.3) and the latest stable pub.dev
+versions checked on 2026-05-18:
+[`file_selector` 1.1.0](https://pub.dev/packages/file_selector) and
+[`file_picker` 11.0.2](https://pub.dev/packages/file_picker).
+
+`✓` means supported. A blank cell means unsupported or not provided as a
+package-level feature.
+
+| Feature | `filegate` | `file_selector` | `file_picker` |
+| --- | :---: | :---: | :---: |
+| Android support | ✓ | ✓ | ✓ |
+| iOS support | ✓ | ✓ | ✓ |
+| macOS support | ✓ | ✓ | ✓ |
+| Windows support | ✓ | ✓ | ✓ |
+| Linux support | ✓ | ✓ | ✓ |
+| Web support |  | ✓ | ✓ |
+| Single file picking | ✓ | ✓ | ✓ |
+| Multiple file picking | ✓ | ✓ | ✓ |
+| Extension filtering | ✓ | ✓ | ✓ |
+| MIME type filtering |  | ✓ |  |
+| UTI filtering |  | ✓ |  |
+| Directory picking | ✓ | ✓ | ✓ |
+| Directory enumeration | ✓ |  |  |
+| Recursive directory enumeration | ✓ |  |  |
+| Mixed file and directory picking | ✓ |  | ✓ |
+| Save or save-as dialog | ✓ | ✓ | ✓ |
+| Chunked file reading | ✓ | ✓ | ✓ |
+| Cancellable read session | ✓ |  |  |
+| Read progress helper | ✓ |  |  |
+| Byte range helper | ✓ |  |  |
+| Read all bytes helper | ✓ | ✓ | ✓ |
+| Result file size metadata | ✓ | ✓ | ✓ |
+| Result modified time metadata | ✓ | ✓ |  |
+| Result MIME type metadata | ✓ | ✓ |  |
+| Android persisted URI access option | ✓ |  |  |
 
 ## Installation
 
@@ -132,6 +171,21 @@ await for (final chunk in session.stream) {
 }
 ```
 
+### Save bytes to a file
+
+```dart
+final saved = await filegate.saveFile(
+  Uint8List.fromList('hello\n'.codeUnits),
+  suggestedName: 'hello.txt',
+  allowedExtensions: ['txt'],
+  mimeType: 'text/plain',
+);
+
+if (saved != null) {
+  print(saved.path);
+}
+```
+
 ### Read with progress
 
 ```dart
@@ -187,6 +241,8 @@ Methods:
 - `pickFiles(...)`: Picks one or more files.
 - `pickDirectoryFiles(...)`: Picks a directory and returns matching files.
 - `pickMixed(...)`: Picks files and directories where supported.
+- `saveFile(...)`: Saves an in-memory byte payload through a native save/export
+  dialog.
 - `getFileSize(String path)`: Returns a file size when known.
 - `openRead(String path, {int chunkSize, int start, int? end})`: Opens a
   cancellable byte stream. `start` is inclusive and `end` is exclusive.
@@ -255,6 +311,7 @@ Fields:
 - `supportsInitialDirectory`
 - `supportsPersistedAccess`
 - `supportsNativeUriRead`
+- `supportsFileSaving`
 
 ## Errors
 
@@ -263,5 +320,6 @@ available in `FilegateErrorCode`, including `invalid_args`,
 `unsupported_mode`, `no_activity`, `no_view_controller`, `picker_active`,
 `path_not_found`, `not_a_file`, `not_a_directory`, `permission_denied`,
 `persist_permission_failed`, `security_scope_failed`, `pick_failed`,
-`picker_failed`, `stream_active`, `missing_stream_id`, `invalid_chunk`,
-`read_open_failed`, `read_failed`, and `enumeration_failed`.
+`picker_failed`, `save_failed`, `write_failed`, `stream_active`,
+`missing_stream_id`, `invalid_chunk`, `read_open_failed`, `read_failed`, and
+`enumeration_failed`.

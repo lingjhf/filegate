@@ -12,6 +12,8 @@ abstract final class FilegateErrorCode {
   static const securityScopeFailed = 'security_scope_failed';
   static const pickFailed = 'pick_failed';
   static const pickerFailed = 'picker_failed';
+  static const saveFailed = 'save_failed';
+  static const writeFailed = 'write_failed';
   static const streamActive = 'stream_active';
   static const missingStreamId = 'missing_stream_id';
   static const invalidChunk = 'invalid_chunk';

@@ -16,6 +16,7 @@ void main() {
   const MethodChannel channel = MethodChannel('filegate');
   final List<MethodCall> methodCalls = <MethodCall>[];
   Object? pickResponse;
+  Object? saveResponse;
   String startReadResponse = 'stream-1';
   Completer<String>? startReadCompleter;
   Object? eventPayload = Uint8List.fromList(const [1, 2, 3]);
@@ -39,6 +40,16 @@ void main() {
         },
       },
     ];
+    saveResponse = {
+      'path': '/tmp/export.txt',
+      'name': 'export.txt',
+      'kind': 'file',
+      'metadata': {
+        'size': 3,
+        'modifiedAt': 1778893200000,
+        'mimeType': 'text/plain',
+      },
+    };
     startReadResponse = 'stream-1';
     startReadCompleter = null;
     eventPayload = Uint8List.fromList(const [1, 2, 3]);
@@ -51,6 +62,10 @@ void main() {
           methodCalls.add(methodCall);
           if (methodCall.method == 'pick') {
             return pickResponse;
+          }
+
+          if (methodCall.method == 'save') {
+            return saveResponse;
           }
 
           if (methodCall.method == 'getFileSize') {
@@ -197,6 +212,7 @@ void main() {
     expect(capabilities.supportsMixedPicking, isFalse);
     expect(capabilities.supportsPersistedAccess, isTrue);
     expect(capabilities.supportsNativeUriRead, isTrue);
+    expect(capabilities.supportsFileSaving, isTrue);
   });
 
   test('capabilities describe Apple mixed picker support', () {
@@ -207,8 +223,10 @@ void main() {
 
     expect(iosCapabilities.supportsMixedPicking, isTrue);
     expect(iosCapabilities.supportsNativeUriRead, isTrue);
+    expect(iosCapabilities.supportsFileSaving, isTrue);
     expect(macosCapabilities.supportsMixedPicking, isTrue);
     expect(macosCapabilities.supportsNativeUriRead, isFalse);
+    expect(macosCapabilities.supportsFileSaving, isTrue);
   });
 
   test('capabilities describe desktop picker limits', () {
@@ -219,8 +237,10 @@ void main() {
 
     expect(windowsCapabilities.supportsMixedPicking, isFalse);
     expect(windowsCapabilities.supportsPersistedAccess, isTrue);
+    expect(windowsCapabilities.supportsFileSaving, isTrue);
     expect(linuxCapabilities.supportsMixedPicking, isFalse);
     expect(linuxCapabilities.supportsPersistedAccess, isTrue);
+    expect(linuxCapabilities.supportsFileSaving, isTrue);
   });
 
   test('capabilities are disabled for unknown operating systems', () {
@@ -234,6 +254,7 @@ void main() {
     expect(capabilities.supportsInitialDirectory, isFalse);
     expect(capabilities.supportsPersistedAccess, isFalse);
     expect(capabilities.supportsNativeUriRead, isFalse);
+    expect(capabilities.supportsFileSaving, isFalse);
   });
 
   test('pick rejects invalid native entry payloads', () async {
@@ -241,6 +262,77 @@ void main() {
 
     await expectLater(
       platform.pick(const FilegatePickOptions()),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
+  test('save encodes payloads and decodes native entries', () async {
+    final result = await platform.save(
+      FilegateSaveOptions(
+        bytes: Uint8List.fromList(const [1, 2, 3]),
+        suggestedName: 'export.txt',
+        allowedExtensions: const ['.TXT'],
+        title: 'Export',
+        initialDirectory: '/tmp',
+        mimeType: 'text/plain',
+        persistAccess: false,
+      ),
+    );
+
+    expect(result!.path, '/tmp/export.txt');
+    expect(result.name, 'export.txt');
+    expect(result.kind, PickedEntryKind.file);
+    expect(result.size, 3);
+    expect(result.mimeType, 'text/plain');
+
+    final arguments =
+        methodCalls.firstWhere((call) => call.method == 'save').arguments
+            as Map<Object?, Object?>;
+    expect(arguments, containsPair('suggestedName', 'export.txt'));
+    expect(arguments, containsPair('allowedExtensions', const ['txt']));
+    expect(arguments, containsPair('title', 'Export'));
+    expect(arguments, containsPair('initialDirectory', '/tmp'));
+    expect(arguments, containsPair('mimeType', 'text/plain'));
+    expect(arguments, containsPair('persistAccess', false));
+    expect(arguments['bytes'], Uint8List.fromList(const [1, 2, 3]));
+  });
+
+  test('save returns null when the native picker is cancelled', () async {
+    saveResponse = null;
+
+    final result = await platform.save(
+      FilegateSaveOptions(bytes: Uint8List(0), suggestedName: 'export.txt'),
+    );
+
+    expect(result, isNull);
+  });
+
+  test('save validates suggestedName before touching the channel', () async {
+    await expectLater(
+      platform.save(
+        FilegateSaveOptions(bytes: Uint8List(0), suggestedName: '  '),
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      platform.save(
+        FilegateSaveOptions(
+          bytes: Uint8List(0),
+          suggestedName: 'nested/export.txt',
+        ),
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(methodCalls.where((call) => call.method == 'save'), isEmpty);
+  });
+
+  test('save rejects invalid native entry payloads', () async {
+    saveResponse = {'path': '/tmp/export.txt'};
+
+    await expectLater(
+      platform.save(
+        FilegateSaveOptions(bytes: Uint8List(0), suggestedName: 'export.txt'),
+      ),
       throwsA(isA<ArgumentError>()),
     );
   });

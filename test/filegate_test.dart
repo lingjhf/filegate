@@ -12,6 +12,7 @@ class MockFilegatePlatform
     with MockPlatformInterfaceMixin
     implements FilegatePlatform {
   FilegatePickOptions? lastOptions;
+  FilegateSaveOptions? lastSaveOptions;
   int? fileSize = 123;
   List<Uint8List> chunks = <Uint8List>[
     Uint8List.fromList(const [1, 2, 3]),
@@ -30,6 +31,7 @@ class MockFilegatePlatform
     supportsInitialDirectory: true,
     supportsPersistedAccess: true,
     supportsNativeUriRead: true,
+    supportsFileSaving: true,
   );
 
   @override
@@ -47,6 +49,19 @@ class MockFilegatePlatform
         kind: PickedEntryKind.file,
       ),
     ]);
+  }
+
+  @override
+  Future<PickedEntry?> save(FilegateSaveOptions options) {
+    lastSaveOptions = options;
+    return Future.value(
+      PickedEntry(
+        path: '/tmp/${options.suggestedName}',
+        name: options.suggestedName,
+        kind: PickedEntryKind.file,
+        metadata: PickedEntryMetadata(size: options.bytes.length),
+      ),
+    );
   }
 
   @override
@@ -107,6 +122,12 @@ void main() {
       throwsA(isA<UnimplementedError>()),
     );
     expect(
+      () => platform.save(
+        FilegateSaveOptions(bytes: Uint8List(0), suggestedName: 'example.txt'),
+      ),
+      throwsA(isA<UnimplementedError>()),
+    );
+    expect(
       () => platform.getFileSize('/tmp/example.txt'),
       throwsA(isA<UnimplementedError>()),
     );
@@ -126,6 +147,50 @@ void main() {
     expect(result!.single.path, '/tmp/example.txt');
     expect(result.single.kind, PickedEntryKind.file);
   });
+
+  test('save delegates to the active platform', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    FilegatePlatform.instance = fakePlatform;
+
+    final result = await filegatePlugin.saveFile(
+      Uint8List.fromList(const [1, 2, 3]),
+      suggestedName: 'export.txt',
+      allowedExtensions: const ['.TXT', 'txt'],
+      mimeType: 'text/plain',
+      persistAccess: false,
+    );
+
+    expect(result!.path, '/tmp/export.txt');
+    expect(result.name, 'export.txt');
+    expect(result.size, 3);
+    expect(fakePlatform.lastSaveOptions!.suggestedName, 'export.txt');
+    expect(fakePlatform.lastSaveOptions!.bytes, const [1, 2, 3]);
+    expect(fakePlatform.lastSaveOptions!.mimeType, 'text/plain');
+    expect(fakePlatform.lastSaveOptions!.persistAccess, isFalse);
+  });
+
+  test(
+    'save validates suggested file names before touching platform',
+    () async {
+      const filegatePlugin = Filegate();
+      final fakePlatform = MockFilegatePlatform();
+      FilegatePlatform.instance = fakePlatform;
+
+      expect(
+        () => filegatePlugin.saveFile(Uint8List(0), suggestedName: ''),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => filegatePlugin.saveFile(
+          Uint8List(0),
+          suggestedName: 'nested/example.txt',
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(fakePlatform.lastSaveOptions, isNull);
+    },
+  );
 
   test('openRead delegates to the active platform', () async {
     const filegatePlugin = Filegate();
@@ -163,6 +228,7 @@ void main() {
     expect(capabilities.supportsFilePicking, isTrue);
     expect(capabilities.supportsMixedPicking, isFalse);
     expect(capabilities.supportsNativeUriRead, isTrue);
+    expect(capabilities.supportsFileSaving, isTrue);
   });
 
   test('capabilities round-trip map payloads', () {
@@ -173,6 +239,7 @@ void main() {
       supportsInitialDirectory: true,
       supportsPersistedAccess: true,
       supportsNativeUriRead: false,
+      supportsFileSaving: true,
     );
 
     final restored = FilegateCapabilities.fromMap(capabilities.toMap());
@@ -192,7 +259,24 @@ void main() {
       capabilities.supportsPersistedAccess,
     );
     expect(restored.supportsNativeUriRead, capabilities.supportsNativeUriRead);
+    expect(restored.supportsFileSaving, capabilities.supportsFileSaving);
   });
+
+  test(
+    'capabilities default file saving support to false for old payloads',
+    () {
+      final restored = FilegateCapabilities.fromMap(const {
+        'supportsFilePicking': true,
+        'supportsDirectoryPicking': true,
+        'supportsMixedPicking': false,
+        'supportsInitialDirectory': true,
+        'supportsPersistedAccess': true,
+        'supportsNativeUriRead': false,
+      });
+
+      expect(restored.supportsFileSaving, isFalse);
+    },
+  );
 
   test('capabilities reject invalid payloads', () {
     expect(
@@ -206,6 +290,29 @@ void main() {
       }),
       throwsA(isA<ArgumentError>()),
     );
+  });
+
+  test('save options encode channel payloads', () {
+    final bytes = Uint8List.fromList(const [1, 2, 3]);
+    final options = FilegateSaveOptions(
+      bytes: bytes,
+      suggestedName: 'export.txt',
+      allowedExtensions: const ['.TXT', ' txt ', '.json'],
+      title: 'Export',
+      initialDirectory: '/tmp',
+      mimeType: 'text/plain',
+      persistAccess: false,
+    );
+
+    expect(options.toMap(), {
+      'bytes': bytes,
+      'suggestedName': 'export.txt',
+      'persistAccess': false,
+      'allowedExtensions': const ['txt', 'json'],
+      'title': 'Export',
+      'initialDirectory': '/tmp',
+      'mimeType': 'text/plain',
+    });
   });
 
   test('picked entry round-trips relativePath', () {
@@ -398,6 +505,8 @@ void main() {
     expect(FilegateErrorCode.securityScopeFailed, 'security_scope_failed');
     expect(FilegateErrorCode.pickFailed, 'pick_failed');
     expect(FilegateErrorCode.pickerFailed, 'picker_failed');
+    expect(FilegateErrorCode.saveFailed, 'save_failed');
+    expect(FilegateErrorCode.writeFailed, 'write_failed');
     expect(FilegateErrorCode.streamActive, 'stream_active');
     expect(FilegateErrorCode.missingStreamId, 'missing_stream_id');
     expect(FilegateErrorCode.invalidChunk, 'invalid_chunk');

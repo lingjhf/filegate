@@ -55,6 +55,7 @@ class FilegateCapabilities {
     required this.supportsInitialDirectory,
     required this.supportsPersistedAccess,
     required this.supportsNativeUriRead,
+    this.supportsFileSaving = false,
   });
 
   final bool supportsFilePicking;
@@ -63,6 +64,7 @@ class FilegateCapabilities {
   final bool supportsInitialDirectory;
   final bool supportsPersistedAccess;
   final bool supportsNativeUriRead;
+  final bool supportsFileSaving;
 
   Map<String, Object?> toMap() {
     return {
@@ -72,6 +74,7 @@ class FilegateCapabilities {
       'supportsInitialDirectory': supportsInitialDirectory,
       'supportsPersistedAccess': supportsPersistedAccess,
       'supportsNativeUriRead': supportsNativeUriRead,
+      'supportsFileSaving': supportsFileSaving,
     };
   }
 
@@ -82,13 +85,15 @@ class FilegateCapabilities {
     final supportsInitialDirectory = map['supportsInitialDirectory'];
     final supportsPersistedAccess = map['supportsPersistedAccess'];
     final supportsNativeUriRead = map['supportsNativeUriRead'];
+    final supportsFileSaving = map['supportsFileSaving'];
 
     if (supportsFilePicking is! bool ||
         supportsDirectoryPicking is! bool ||
         supportsMixedPicking is! bool ||
         supportsInitialDirectory is! bool ||
         supportsPersistedAccess is! bool ||
-        supportsNativeUriRead is! bool) {
+        supportsNativeUriRead is! bool ||
+        (supportsFileSaving != null && supportsFileSaving is! bool)) {
       throw ArgumentError.value(map, 'map', 'Invalid capabilities payload');
     }
 
@@ -99,6 +104,7 @@ class FilegateCapabilities {
       supportsInitialDirectory: supportsInitialDirectory,
       supportsPersistedAccess: supportsPersistedAccess,
       supportsNativeUriRead: supportsNativeUriRead,
+      supportsFileSaving: supportsFileSaving as bool? ?? false,
     );
   }
 }
@@ -142,6 +148,42 @@ class FilegatePickOptions {
     final trimmed = extension.trim();
     final withoutDots = trimmed.replaceFirst(RegExp(r'^\.+'), '');
     return withoutDots.toLowerCase();
+  }
+}
+
+class FilegateSaveOptions {
+  const FilegateSaveOptions({
+    required this.bytes,
+    required this.suggestedName,
+    this.allowedExtensions = const [],
+    this.title,
+    this.initialDirectory,
+    this.mimeType,
+    this.persistAccess = true,
+  });
+
+  final Uint8List bytes;
+  final String suggestedName;
+  final List<String> allowedExtensions;
+  final String? title;
+  final String? initialDirectory;
+  final String? mimeType;
+  final bool persistAccess;
+
+  Map<String, Object?> toMap() {
+    return {
+      'bytes': bytes,
+      'suggestedName': suggestedName,
+      'persistAccess': persistAccess,
+      'allowedExtensions': allowedExtensions
+          .map(FilegatePickOptions._normalizeExtension)
+          .where((extension) => extension.isNotEmpty)
+          .toSet()
+          .toList(growable: false),
+      'title': title,
+      'initialDirectory': initialDirectory,
+      'mimeType': mimeType,
+    };
   }
 }
 

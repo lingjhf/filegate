@@ -35,6 +35,10 @@ abstract class FilegatePlatform extends PlatformInterface {
     throw UnimplementedError('pick() has not been implemented.');
   }
 
+  Future<PickedEntry?> save(FilegateSaveOptions options) {
+    throw UnimplementedError('save() has not been implemented.');
+  }
+
   Future<int?> getFileSize(String path) {
     throw UnimplementedError('getFileSize() has not been implemented.');
   }

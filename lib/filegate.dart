@@ -23,6 +23,33 @@ class Filegate {
     return FilegatePlatform.instance.pick(options);
   }
 
+  Future<PickedEntry?> save(FilegateSaveOptions options) {
+    _validateSaveOptions(options);
+    return FilegatePlatform.instance.save(options);
+  }
+
+  Future<PickedEntry?> saveFile(
+    Uint8List bytes, {
+    required String suggestedName,
+    List<String> allowedExtensions = const [],
+    String? title,
+    String? initialDirectory,
+    String? mimeType,
+    bool persistAccess = true,
+  }) {
+    return save(
+      FilegateSaveOptions(
+        bytes: bytes,
+        suggestedName: suggestedName,
+        allowedExtensions: allowedExtensions,
+        title: title,
+        initialDirectory: initialDirectory,
+        mimeType: mimeType,
+        persistAccess: persistAccess,
+      ),
+    );
+  }
+
   Future<List<PickedEntry>?> pickFiles({
     bool allowMultiple = false,
     List<String> allowedExtensions = const [],
@@ -331,6 +358,24 @@ void _validateOpenReadArguments(
       end,
       'end',
       'end must be greater than or equal to start',
+    );
+  }
+}
+
+void _validateSaveOptions(FilegateSaveOptions options) {
+  if (options.suggestedName.trim().isEmpty) {
+    throw ArgumentError.value(
+      options.suggestedName,
+      'suggestedName',
+      'suggestedName must not be empty',
+    );
+  }
+  if (options.suggestedName.contains('/') ||
+      options.suggestedName.contains(r'\')) {
+    throw ArgumentError.value(
+      options.suggestedName,
+      'suggestedName',
+      'suggestedName must be a file name, not a path',
     );
   }
 }

@@ -46,6 +46,21 @@ semantics below unless a future changelog calls out a breaking change.
   Native event-channel registrations remain available until Flutter
   deactivates the stream.
 
+## Saving
+
+- `saveFile(bytes, suggestedName: name)` opens the platform save/export UI,
+  writes the provided bytes after the user confirms, and returns a
+  `PickedEntry` for the saved file.
+- If the user cancels the save/export UI, `saveFile()` returns `null`.
+- `suggestedName` must be a non-empty file name, not a path. Empty byte
+  payloads are valid and create an empty file when the platform accepts them.
+- `allowedExtensions` are normalized with the same rules as picker options and
+  are used as platform save dialog filters where the platform supports them.
+- Save results should include best-effort metadata for the saved file when the
+  platform can provide it.
+- Direct save is one-shot and memory-backed. Streaming save and append/resume
+  behavior are intentionally outside this contract.
+
 ## Directory listing
 
 - `listDirectoryFiles()` lists files from a known file-system directory without
@@ -73,6 +88,8 @@ Native failures are surfaced as `PlatformException`s with
 - `security_scope_failed`
 - `pick_failed`
 - `picker_failed`
+- `save_failed`
+- `write_failed`
 - `stream_active`
 - `missing_stream_id`
 - `invalid_chunk`

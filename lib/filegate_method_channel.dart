@@ -37,6 +37,7 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsInitialDirectory: true,
         supportsPersistedAccess: true,
         supportsNativeUriRead: true,
+        supportsFileSaving: true,
       ),
       'ios' => const FilegateCapabilities(
         supportsFilePicking: true,
@@ -45,6 +46,7 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsInitialDirectory: true,
         supportsPersistedAccess: false,
         supportsNativeUriRead: true,
+        supportsFileSaving: true,
       ),
       'macos' => const FilegateCapabilities(
         supportsFilePicking: true,
@@ -53,6 +55,7 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsInitialDirectory: true,
         supportsPersistedAccess: true,
         supportsNativeUriRead: false,
+        supportsFileSaving: true,
       ),
       'windows' => const FilegateCapabilities(
         supportsFilePicking: true,
@@ -61,6 +64,7 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsInitialDirectory: true,
         supportsPersistedAccess: true,
         supportsNativeUriRead: false,
+        supportsFileSaving: true,
       ),
       'linux' => const FilegateCapabilities(
         supportsFilePicking: true,
@@ -69,6 +73,7 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsInitialDirectory: true,
         supportsPersistedAccess: true,
         supportsNativeUriRead: false,
+        supportsFileSaving: true,
       ),
       _ => const FilegateCapabilities(
         supportsFilePicking: false,
@@ -100,6 +105,36 @@ class MethodChannelFilegate extends FilegatePlatform {
 
     return uniqueEntries.values.toList(growable: false)
       ..sort(_comparePickedEntries);
+  }
+
+  @override
+  Future<PickedEntry?> save(FilegateSaveOptions options) async {
+    if (options.suggestedName.trim().isEmpty) {
+      throw ArgumentError.value(
+        options.suggestedName,
+        'suggestedName',
+        'suggestedName must not be empty',
+      );
+    }
+    if (options.suggestedName.contains('/') ||
+        options.suggestedName.contains(r'\')) {
+      throw ArgumentError.value(
+        options.suggestedName,
+        'suggestedName',
+        'suggestedName must be a file name, not a path',
+      );
+    }
+
+    final entry = await methodChannel.invokeMapMethod<Object?, Object?>(
+      'save',
+      options.toMap(),
+    );
+
+    if (entry == null) {
+      return null;
+    }
+
+    return PickedEntry.fromMap(entry);
   }
 
   @override
