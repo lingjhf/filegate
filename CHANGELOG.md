@@ -8,6 +8,8 @@
   native save/export dialogs across supported platforms.
 - Added a direct file write API contract for replacing or appending bytes to
   existing files across supported platforms.
+- Implemented direct append/replace writing in the native plugins and covered
+  it in the example app and integration tests.
 
 ### Fixed
 

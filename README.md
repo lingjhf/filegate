@@ -1,11 +1,12 @@
 # filegate
 
-A Flutter plugin for native file picking, direct file saving, and streamed file
-reading.
+A Flutter plugin for native file picking, direct file saving, direct file
+writing, and streamed file reading.
 
 The plugin exposes a Dart API for picking files or directory contents, saving
-bytes through native save/export dialogs, querying file size, and reading files
-in chunks without loading the whole file into memory first.
+bytes through native save/export dialogs, writing bytes to existing files,
+querying file size, and reading files in chunks without loading the whole file
+into memory first.
 
 ## Supported platforms
 
@@ -55,6 +56,7 @@ package-level feature.
 | Result modified time metadata | ✓ | ✓ |  |
 | Result MIME type metadata | ✓ | ✓ |  |
 | Android persisted URI access option | ✓ |  |  |
+| Direct append/replace writing | ✓ |  |  |
 
 ## Installation
 

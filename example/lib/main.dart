@@ -6,6 +6,7 @@ import 'src/directory_picker_example_page.dart';
 import 'src/file_picker_example_page.dart';
 import 'src/read_file_example_page.dart';
 import 'src/save_file_example_page.dart';
+import 'src/write_file_example_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -95,6 +96,19 @@ class _ExampleListPage extends StatelessWidget {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => SaveFileExamplePage(filegate: filegate),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            key: const ValueKey<String>('write-example-tile'),
+            title: const Text('Write file'),
+            subtitle: const Text('Append or replace an existing file'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => WriteFileExamplePage(filegate: filegate),
                 ),
               );
             },

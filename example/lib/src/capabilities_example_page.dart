@@ -58,6 +58,10 @@ class CapabilitiesExamplePage extends StatelessWidget {
                 label: 'File saving',
                 value: capabilities.supportsFileSaving,
               ),
+              _CapabilityTile(
+                label: 'File writing',
+                value: capabilities.supportsFileWriting,
+              ),
             ],
           );
         },

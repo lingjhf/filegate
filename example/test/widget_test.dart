@@ -15,6 +15,7 @@ void main() {
     expect(find.text('Directory'), findsOneWidget);
     expect(find.text('Read file'), findsOneWidget);
     expect(find.text('Save file'), findsOneWidget);
+    expect(find.text('Write file'), findsOneWidget);
 
     await tester.tap(
       find.byKey(const ValueKey<String>('capabilities-example-tile')),
@@ -27,6 +28,7 @@ void main() {
     expect(find.text('File picking'), findsOneWidget);
     expect(find.text('Native URI read'), findsOneWidget);
     expect(find.text('File saving'), findsOneWidget);
+    expect(find.text('File writing'), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -65,6 +67,15 @@ void main() {
       find.byKey(const ValueKey<String>('save-file-button')),
       findsOneWidget,
     );
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('write-example-tile')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey<String>('pick-write-target-button')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('file picker page displays selected files', (tester) async {
@@ -96,6 +107,23 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('write page appends to selected file', (tester) async {
+    await tester.pumpWidget(MyApp(filegate: _FakeFilegate()));
+
+    await tester.tap(find.byKey(const ValueKey<String>('write-example-tile')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('pick-write-target-button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('append-file-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Appended to notes.txt'), findsOneWidget);
+    expect(find.text('notes.txt'), findsOneWidget);
+    expect(find.textContaining('/tmp/notes.txt'), findsOneWidget);
+  });
 }
 
 class _FakeFilegate extends Filegate {
@@ -109,6 +137,7 @@ class _FakeFilegate extends Filegate {
       supportsPersistedAccess: true,
       supportsNativeUriRead: false,
       supportsFileSaving: true,
+      supportsFileWriting: true,
     );
   }
 
@@ -182,6 +211,23 @@ class _FakeFilegate extends Filegate {
       name: suggestedName,
       kind: PickedEntryKind.file,
       metadata: PickedEntryMetadata(size: bytes.length, mimeType: mimeType),
+    );
+  }
+
+  @override
+  Future<PickedEntry> writeFile(
+    String path,
+    Uint8List bytes, {
+    FilegateWriteMode mode = FilegateWriteMode.replace,
+  }) async {
+    return PickedEntry(
+      path: path,
+      name: path.split('/').last,
+      kind: PickedEntryKind.file,
+      metadata: PickedEntryMetadata(
+        size: mode == FilegateWriteMode.append ? 28 : bytes.length,
+        mimeType: 'text/plain',
+      ),
     );
   }
 }

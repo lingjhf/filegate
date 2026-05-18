@@ -19,6 +19,7 @@ void main() {
     expect(find.text('Directory'), findsOneWidget);
     expect(find.text('Read file'), findsOneWidget);
     expect(find.text('Save file'), findsOneWidget);
+    expect(find.text('Write file'), findsOneWidget);
   });
 
   testWidgets('example pages can be opened from the list', (
@@ -70,6 +71,15 @@ void main() {
     await _pumpFrames(tester);
     expect(
       find.byKey(const ValueKey<String>('save-file-button')),
+      findsOneWidget,
+    );
+
+    await tester.pageBack();
+    await _pumpFrames(tester);
+    await tester.tap(find.byKey(const ValueKey<String>('write-example-tile')));
+    await _pumpFrames(tester);
+    expect(
+      find.byKey(const ValueKey<String>('pick-write-target-button')),
       findsOneWidget,
     );
   });
@@ -139,7 +149,26 @@ void main() {
     );
   });
 
-  testWidgets('native file APIs read a sandbox file', (_) async {
+  testWidgets('write page renders updated file entry', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(MyApp(filegate: _FakeFilegate()));
+
+    await tester.tap(find.byKey(const ValueKey<String>('write-example-tile')));
+    await _pumpFrames(tester);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('pick-write-target-button')),
+    );
+    await _pumpFrames(tester);
+    await tester.tap(find.byKey(const ValueKey<String>('replace-file-button')));
+    await _pumpFrames(tester);
+
+    expect(find.text('Replaced notes.txt'), findsOneWidget);
+    expect(find.text('notes.txt'), findsOneWidget);
+    expect(find.text('/tmp/notes.txt | 21 bytes | text/plain'), findsOneWidget);
+  });
+
+  testWidgets('native file APIs read and write a sandbox file', (_) async {
     final directory = await Directory.systemTemp.createTemp(
       'filegate-integration-',
     );
@@ -181,6 +210,7 @@ void main() {
     );
     expect(capabilities.supportsFilePicking, isTrue);
     expect(capabilities.supportsDirectoryPicking, isTrue);
+    expect(capabilities.supportsFileWriting, isTrue);
     expect(transientPickOptions.toMap(), containsPair('persistAccess', false));
     expect(pickedFile.locationKind, FilegateLocationKind.platformPath);
     expect(pickedFile.fileSystemPath, file.path);
@@ -247,6 +277,41 @@ void main() {
     expect(progressChunks.last.bytesRead, 5);
     expect(progressChunks.last.totalBytes, 5);
     expect(progressChunks.last.progress, 1.0);
+
+    final appendBytes = Uint8List.fromList('++'.codeUnits);
+    final appended = await filegate.writeFile(
+      file.path,
+      appendBytes,
+      mode: FilegateWriteMode.append,
+    );
+    expect(appended.name, 'sample.txt');
+    expect(appended.fileSystemPath, file.path);
+    expect(appended.size, bytes.length + appendBytes.length);
+    expect(
+      (await file.readAsBytes()).toList(),
+      bytes.followedBy(appendBytes).toList(),
+    );
+
+    final replaceBytes = Uint8List.fromList('reset\n'.codeUnits);
+    final replaced = await filegate.writeFile(file.path, replaceBytes);
+    expect(replaced.name, 'sample.txt');
+    expect(replaced.fileSystemPath, file.path);
+    expect(replaced.size, replaceBytes.length);
+    expect((await file.readAsBytes()).toList(), replaceBytes.toList());
+
+    await expectLater(
+      filegate.writeFile(
+        '${directory.path}${Platform.pathSeparator}missing.txt',
+        replaceBytes,
+      ),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          FilegateErrorCode.pathNotFound,
+        ),
+      ),
+    );
   });
 }
 
@@ -266,6 +331,7 @@ class _FakeFilegate extends Filegate {
       supportsPersistedAccess: true,
       supportsNativeUriRead: false,
       supportsFileSaving: true,
+      supportsFileWriting: true,
     );
   }
 
@@ -346,6 +412,23 @@ class _FakeFilegate extends Filegate {
       name: suggestedName,
       kind: PickedEntryKind.file,
       metadata: PickedEntryMetadata(size: bytes.length, mimeType: mimeType),
+    );
+  }
+
+  @override
+  Future<PickedEntry> writeFile(
+    String path,
+    Uint8List bytes, {
+    FilegateWriteMode mode = FilegateWriteMode.replace,
+  }) async {
+    return PickedEntry(
+      path: path,
+      name: path.split('/').last,
+      kind: PickedEntryKind.file,
+      metadata: PickedEntryMetadata(
+        size: mode == FilegateWriteMode.append ? 28 : bytes.length,
+        mimeType: 'text/plain',
+      ),
     );
   }
 }
