@@ -8,6 +8,8 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   private var readChannels: [String: FlutterEventChannel] = [:]
   private var readHandlers: [String: FileReadStreamHandler] = [:]
   private var pendingPickResult: FlutterResult?
+  private var pendingSaveResult: FlutterResult?
+  private var pendingSaveTemporaryDirectoryURL: URL?
   private var pendingSelectionMode = "filesOnly"
   private var pendingPickRecursive = false
   private var pendingAllowedExtensions: [String] = []
@@ -27,6 +29,8 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     switch call.method {
     case "pick":
       pick(arguments: call.arguments as? [String: Any], result: result)
+    case "save":
+      save(arguments: call.arguments as? [String: Any], result: result)
     case "getFileSize":
       getFileSize(arguments: call.arguments as? [String: Any], result: result)
     case "startRead":
@@ -81,7 +85,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   }
 
   private func pick(arguments: [String: Any]?, result: @escaping FlutterResult) {
-    guard pendingPickResult == nil else {
+    guard pendingPickResult == nil && pendingSaveResult == nil else {
       result(FlutterError(code: "picker_active", message: "Another file picker request is already active.", details: nil))
       return
     }
@@ -121,6 +125,60 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     pendingSelectionMode = selectionMode
     pendingPickRecursive = recursive
     pendingAllowedExtensions = allowedExtensions
+
+    presenter.present(picker, animated: true)
+  }
+
+  private func save(arguments: [String: Any]?, result: @escaping FlutterResult) {
+    guard pendingPickResult == nil && pendingSaveResult == nil else {
+      result(FlutterError(code: "picker_active", message: "Another file picker request is already active.", details: nil))
+      return
+    }
+
+    guard let presenter = topViewController() else {
+      result(FlutterError(code: "no_view_controller", message: "No view controller is available to present the document picker.", details: nil))
+      return
+    }
+
+    guard let typedData = arguments?["bytes"] as? FlutterStandardTypedData else {
+      result(FlutterError(code: "invalid_args", message: "A byte payload is required.", details: nil))
+      return
+    }
+    guard let suggestedName = arguments?["suggestedName"] as? String,
+          isValidFileName(suggestedName) else {
+      result(FlutterError(code: "invalid_args", message: "A non-empty file name is required.", details: nil))
+      return
+    }
+
+    let title = arguments?["title"] as? String
+    let initialDirectory = arguments?["initialDirectory"] as? String
+    let temporaryDirectory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("filegate-\(UUID().uuidString)", isDirectory: true)
+    let temporaryFile = temporaryDirectory.appendingPathComponent(suggestedName)
+
+    do {
+      try FileManager.default.createDirectory(
+        at: temporaryDirectory,
+        withIntermediateDirectories: true
+      )
+      try typedData.data.write(to: temporaryFile, options: .atomic)
+    } catch {
+      try? FileManager.default.removeItem(at: temporaryDirectory)
+      result(FlutterError(code: "write_failed", message: error.localizedDescription, details: suggestedName))
+      return
+    }
+
+    let picker = UIDocumentPickerViewController(url: temporaryFile, in: .exportToService)
+    picker.delegate = self
+    if let title, !title.isEmpty {
+      picker.title = title
+    }
+    if let initialDirectory, !initialDirectory.isEmpty {
+      picker.directoryURL = resolveURL(from: initialDirectory)
+    }
+
+    pendingSaveResult = result
+    pendingSaveTemporaryDirectoryURL = temporaryDirectory
 
     presenter.present(picker, animated: true)
   }
@@ -212,6 +270,11 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   }
 
   public func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    if pendingSaveResult != nil {
+      completePendingSave(urls: urls)
+      return
+    }
+
     let result = pendingPickResult
     let selectionMode = pendingSelectionMode
     let recursive = pendingPickRecursive
@@ -238,6 +301,12 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   }
 
   public func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+    if let result = pendingSaveResult {
+      result(nil)
+      clearPendingSaveState()
+      return
+    }
+
     pendingPickResult?(nil)
     clearPendingPickState()
   }
@@ -247,6 +316,31 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     pendingSelectionMode = "filesOnly"
     pendingPickRecursive = false
     pendingAllowedExtensions = []
+  }
+
+  private func completePendingSave(urls: [URL]) {
+    let result = pendingSaveResult
+    defer {
+      clearPendingSaveState()
+    }
+
+    guard let result else {
+      return
+    }
+    guard let url = urls.first else {
+      result(FlutterError(code: "save_failed", message: "No exported file URL was returned.", details: nil))
+      return
+    }
+
+    result(serializeFileEntry(url))
+  }
+
+  private func clearPendingSaveState() {
+    if let temporaryDirectory = pendingSaveTemporaryDirectoryURL {
+      try? FileManager.default.removeItem(at: temporaryDirectory)
+    }
+    pendingSaveResult = nil
+    pendingSaveTemporaryDirectoryURL = nil
   }
 
   private func resolvePickedEntries(
@@ -415,6 +509,11 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       }
     }
     return normalized
+  }
+
+  private func isValidFileName(_ value: String) -> Bool {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return !trimmed.isEmpty && !value.contains("/") && !value.contains("\\")
   }
 
   private func metadataForFile(_ url: URL) -> [String: Any] {

@@ -30,6 +30,7 @@ constexpr char kNotAFile[] = "not_a_file";
 constexpr char kPathNotFound[] = "path_not_found";
 constexpr char kUnsupportedMode[] = "unsupported_mode";
 constexpr char kEnumerationFailed[] = "enumeration_failed";
+constexpr char kWriteFailed[] = "write_failed";
 
 const char* lookup_string(FlValue* map, const char* key) {
   if (map == nullptr || fl_value_get_type(map) != FL_VALUE_TYPE_MAP) {
@@ -51,6 +52,13 @@ bool lookup_bool(FlValue* map, const char* key, bool fallback) {
     return fallback;
   }
   return fl_value_get_bool(value);
+}
+
+FlValue* lookup_value(FlValue* map, const char* key) {
+  if (map == nullptr || fl_value_get_type(map) != FL_VALUE_TYPE_MAP) {
+    return nullptr;
+  }
+  return fl_value_lookup_string(map, key);
 }
 
 std::string normalize_extension(const char* extension) {
@@ -94,6 +102,19 @@ std::vector<std::string> lookup_extensions(FlValue* map) {
     }
   }
   return extensions;
+}
+
+bool is_valid_file_name(const char* value) {
+  if (value == nullptr || strlen(value) == 0 || strchr(value, '/') != nullptr ||
+      strchr(value, '\\') != nullptr) {
+    return false;
+  }
+  for (const char* cursor = value; *cursor != '\0'; cursor++) {
+    if (!g_ascii_isspace(*cursor)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool matches_allowed_extensions(const char* path,
@@ -316,6 +337,62 @@ FlMethodResponse* filegate_pick_files(FlValue* arguments) {
   return FL_METHOD_RESPONSE(fl_method_success_response_new(entries));
 }
 
+FlMethodResponse* filegate_save_file(FlValue* arguments) {
+  FlValue* bytes_value = lookup_value(arguments, "bytes");
+  if (bytes_value == nullptr ||
+      fl_value_get_type(bytes_value) != FL_VALUE_TYPE_UINT8_LIST) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kInvalidArgs, "A byte payload is required.", nullptr));
+  }
+
+  const char* suggested_name = lookup_string(arguments, "suggestedName");
+  if (!is_valid_file_name(suggested_name)) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kInvalidArgs, "A non-empty file name is required.", nullptr));
+  }
+
+  const char* title = lookup_string(arguments, "title");
+  const char* initial_directory = lookup_string(arguments, "initialDirectory");
+  std::vector<std::string> extensions = lookup_extensions(arguments);
+
+  GtkFileChooserNative* dialog = gtk_file_chooser_native_new(
+      title != nullptr && strlen(title) > 0 ? title : "Save file", nullptr,
+      GTK_FILE_CHOOSER_ACTION_SAVE, "_Save", "_Cancel");
+  GtkFileChooser* chooser = GTK_FILE_CHOOSER(dialog);
+  gtk_file_chooser_set_do_overwrite_confirmation(chooser, TRUE);
+  gtk_file_chooser_set_current_name(chooser, suggested_name);
+  if (initial_directory != nullptr && strlen(initial_directory) > 0) {
+    gtk_file_chooser_set_current_folder(chooser, initial_directory);
+  }
+  add_extension_filters(chooser, extensions);
+
+  gint response = gtk_native_dialog_run(GTK_NATIVE_DIALOG(dialog));
+  if (response != GTK_RESPONSE_ACCEPT) {
+    g_object_unref(dialog);
+    return FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  }
+
+  g_autofree gchar* path = gtk_file_chooser_get_filename(chooser);
+  g_object_unref(dialog);
+  if (path == nullptr || strlen(path) == 0) {
+    return FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  }
+
+  const uint8_t* bytes = fl_value_get_uint8_list(bytes_value);
+  const size_t length = fl_value_get_length(bytes_value);
+  g_autoptr(GError) error = nullptr;
+  if (!g_file_set_contents(path, reinterpret_cast<const gchar*>(bytes),
+                           static_cast<gssize>(length), &error)) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kWriteFailed,
+        error != nullptr ? error->message : "Unable to write the selected file.",
+        nullptr));
+  }
+
+  g_autoptr(FlValue) result = serialize_file_entry(path, nullptr);
+  return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+}
+
 // Called when a method call is received from Flutter.
 static void filegate_plugin_handle_method_call(
     FilegatePlugin* self,
@@ -326,6 +403,8 @@ static void filegate_plugin_handle_method_call(
 
   if (strcmp(method, "pick") == 0) {
     response = filegate_pick_files(arguments);
+  } else if (strcmp(method, "save") == 0) {
+    response = filegate_save_file(arguments);
   } else if (strcmp(method, "getFileSize") == 0) {
     response = filegate_get_file_size(arguments);
   } else {

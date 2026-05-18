@@ -40,6 +40,7 @@ class FilegatePlugin :
     private val readChannels = mutableMapOf<String, EventChannel>()
     private val readHandlers = mutableMapOf<String, FileReadStreamHandler>()
     private var pendingPick: PendingPick? = null
+    private var pendingSave: PendingSave? = null
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         applicationContext = flutterPluginBinding.applicationContext
@@ -54,6 +55,7 @@ class FilegatePlugin :
     ) {
         when (call.method) {
             "pick" -> pick(call.arguments as? Map<*, *>, result)
+            "save" -> save(call.arguments as? Map<*, *>, result)
             "getFileSize" -> getFileSize(call.arguments as? Map<*, *>, result)
             "startRead" -> startRead(call.arguments as? Map<*, *>, result)
             "cancelRead" -> cancelRead(call.arguments as? Map<*, *>, result)
@@ -63,6 +65,7 @@ class FilegatePlugin :
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         pendingPick = null
+        pendingSave = null
         readHandlers.values.toList().forEach { it.cancel() }
         readHandlers.clear()
         readChannels.values.toList().forEach { it.setStreamHandler(null) }
@@ -91,10 +94,17 @@ class FilegatePlugin :
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
-        if (requestCode != requestCodePick) {
-            return false
+        if (requestCode == requestCodeSave) {
+            return handleSaveActivityResult(resultCode, data)
+        }
+        if (requestCode == requestCodePick) {
+            return handlePickActivityResult(resultCode, data)
         }
 
+        return false
+    }
+
+    private fun handlePickActivityResult(resultCode: Int, data: Intent?): Boolean {
         val pending = pendingPick ?: return false
         pendingPick = null
 
@@ -137,6 +147,51 @@ class FilegatePlugin :
         return true
     }
 
+    private fun handleSaveActivityResult(resultCode: Int, data: Intent?): Boolean {
+        val pending = pendingSave ?: return false
+        pendingSave = null
+
+        if (resultCode != Activity.RESULT_OK || data == null) {
+            pending.result.success(null)
+            return true
+        }
+
+        val uri = data.data
+        if (uri == null) {
+            pending.result.error("path_not_found", "No save URI was returned from the picker.", null)
+            return true
+        }
+
+        try {
+            if (pending.persistAccess) {
+                takePersistablePermission(data, uri)
+            }
+            applicationContext.contentResolver.openOutputStream(uri, "wt")?.use { outputStream ->
+                outputStream.write(pending.bytes)
+                outputStream.flush()
+            } ?: throw FilegateError("write_failed", "Unable to open the selected URI for writing.", uri.toString())
+
+            val document = DocumentFile.fromSingleUri(applicationContext, uri)
+            val name = document?.name
+                ?: queryDisplayName(uri)
+                ?: pending.suggestedName
+            val metadata = metadataForDocument(document, uri).toMutableMap()
+            metadata["size"] = pending.bytes.size.toLong()
+            if (!pending.mimeType.isNullOrEmpty()) {
+                metadata["mimeType"] = pending.mimeType
+            }
+            pending.result.success(serializeFileEntry(uri, name, metadata = metadata))
+        } catch (error: FilegateError) {
+            pending.result.error(error.code, error.message, error.details)
+        } catch (error: SecurityException) {
+            pending.result.error("permission_denied", error.localizedMessage, uri.toString())
+        } catch (error: Exception) {
+            pending.result.error("write_failed", error.localizedMessage, uri.toString())
+        }
+
+        return true
+    }
+
     private fun pick(arguments: Map<*, *>?, result: Result) {
         val currentActivity = activity
             ?: run {
@@ -144,7 +199,7 @@ class FilegatePlugin :
                 return
             }
 
-        if (pendingPick != null) {
+        if (pendingPick != null || pendingSave != null) {
             result.error("picker_active", "Another file picker request is already active.", null)
             return
         }
@@ -184,6 +239,48 @@ class FilegatePlugin :
             persistAccess
         )
         currentActivity.startActivityForResult(intent, requestCodePick)
+    }
+
+    private fun save(arguments: Map<*, *>?, result: Result) {
+        val currentActivity = activity
+            ?: run {
+                result.error("no_activity", "File saver requires a foreground activity.", null)
+                return
+            }
+
+        if (pendingPick != null || pendingSave != null) {
+            result.error("picker_active", "Another file picker request is already active.", null)
+            return
+        }
+
+        val bytes = arguments?.get("bytes") as? ByteArray
+        if (bytes == null) {
+            result.error("invalid_args", "A byte payload is required.", null)
+            return
+        }
+        val suggestedName = arguments?.get("suggestedName") as? String
+        if (suggestedName.isNullOrBlank() || suggestedName.contains('/') || suggestedName.contains('\\')) {
+            result.error("invalid_args", "A non-empty file name is required.", null)
+            return
+        }
+
+        val mimeType = arguments?.get("mimeType") as? String
+        val initialDirectory = arguments?.get("initialDirectory") as? String
+        val persistAccess = arguments?.get("persistAccess") as? Boolean ?: true
+        val intent = buildCreateDocumentIntent(
+            suggestedName,
+            mimeType,
+            initialDirectory
+        )
+
+        pendingSave = PendingSave(
+            result,
+            bytes,
+            suggestedName,
+            mimeType,
+            persistAccess
+        )
+        currentActivity.startActivityForResult(intent, requestCodeSave)
     }
 
     private fun startRead(arguments: Map<*, *>?, result: Result) {
@@ -311,6 +408,24 @@ class FilegatePlugin :
 
     private fun buildOpenDocumentTreeIntent(initialDirectory: String?): Intent {
         return Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            maybePutInitialUri(initialDirectory)
+        }
+    }
+
+    private fun buildCreateDocumentIntent(
+        suggestedName: String,
+        mimeType: String?,
+        initialDirectory: String?
+    ): Intent {
+        return Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mimeType?.takeIf { it.isNotBlank() } ?: "*/*"
+            putExtra(Intent.EXTRA_TITLE, suggestedName)
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            )
             maybePutInitialUri(initialDirectory)
         }
     }
@@ -663,6 +778,14 @@ class FilegatePlugin :
         val persistAccess: Boolean
     )
 
+    private data class PendingSave(
+        val result: Result,
+        val bytes: ByteArray,
+        val suggestedName: String,
+        val mimeType: String?,
+        val persistAccess: Boolean
+    )
+
     private data class FilegateError(
         val code: String,
         override val message: String,
@@ -814,6 +937,7 @@ class FilegatePlugin :
 
     companion object {
         private const val requestCodePick = 64321
+        private const val requestCodeSave = 64322
         private const val readChannelPrefix = "filegate/read"
         private const val mixedModeUnsupportedMessage =
             "Android Storage Access Framework does not provide a single system picker intent for mixed file and directory selection. Use ACTION_OPEN_DOCUMENT for files or ACTION_OPEN_DOCUMENT_TREE for directories."

@@ -34,6 +34,7 @@ constexpr char kNotAFile[] = "not_a_file";
 constexpr char kPathNotFound[] = "path_not_found";
 constexpr char kUnsupportedMode[] = "unsupported_mode";
 constexpr char kEnumerationFailed[] = "enumeration_failed";
+constexpr char kWriteFailed[] = "write_failed";
 
 std::wstring Utf8ToWide(const std::string& value) {
   if (value.empty()) {
@@ -66,6 +67,18 @@ const std::string* LookupString(const EncodableMap* map, const char* key) {
   return std::get_if<std::string>(&iterator->second);
 }
 
+const std::vector<uint8_t>* LookupBytes(const EncodableMap* map,
+                                        const char* key) {
+  if (map == nullptr) {
+    return nullptr;
+  }
+  auto iterator = map->find(EncodableValue(key));
+  if (iterator == map->end()) {
+    return nullptr;
+  }
+  return std::get_if<std::vector<uint8_t>>(&iterator->second);
+}
+
 std::string NormalizeExtension(std::string extension) {
   const auto first = std::find_if_not(
       extension.begin(), extension.end(),
@@ -87,6 +100,17 @@ std::string NormalizeExtension(std::string extension) {
                    return static_cast<char>(std::tolower(character));
                  });
   return extension;
+}
+
+bool IsValidFileName(const std::string* value) {
+  if (value == nullptr || value->empty() ||
+      value->find('/') != std::string::npos ||
+      value->find('\\') != std::string::npos) {
+    return false;
+  }
+  return std::any_of(value->begin(), value->end(), [](unsigned char character) {
+    return !std::isspace(character);
+  });
 }
 
 bool LookupBool(const EncodableMap* map, const char* key, bool fallback) {
@@ -315,6 +339,8 @@ void FilegatePlugin::HandleMethodCall(
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   if (method_call.method_name().compare("pick") == 0) {
     Pick(method_call.arguments(), std::move(result));
+  } else if (method_call.method_name().compare("save") == 0) {
+    Save(method_call.arguments(), std::move(result));
   } else if (method_call.method_name().compare("getFileSize") == 0) {
     GetFileSize(method_call.arguments(), std::move(result));
   } else {
@@ -351,6 +377,147 @@ void FilegatePlugin::GetFileSize(
   }
 
   result->Success(EncodableValue(static_cast<int64_t>(size)));
+}
+
+void FilegatePlugin::Save(
+    const flutter::EncodableValue* arguments,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const EncodableMap* map = GetArgumentsMap(arguments);
+  const std::vector<uint8_t>* bytes = LookupBytes(map, "bytes");
+  if (bytes == nullptr) {
+    result->Error(kInvalidArgs, "A byte payload is required.");
+    return;
+  }
+
+  const std::string* suggested_name = LookupString(map, "suggestedName");
+  if (!IsValidFileName(suggested_name)) {
+    result->Error(kInvalidArgs, "A non-empty file name is required.");
+    return;
+  }
+
+  HRESULT init_result =
+      CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+  const bool should_uninitialize = SUCCEEDED(init_result);
+  if (FAILED(init_result) && init_result != RPC_E_CHANGED_MODE) {
+    result->Error("save_failed", "Unable to initialize COM.");
+    return;
+  }
+
+  ComPtr<IFileSaveDialog> dialog;
+  HRESULT hr = CoCreateInstance(CLSID_FileSaveDialog, nullptr,
+                                CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog));
+  if (FAILED(hr)) {
+    if (should_uninitialize) {
+      CoUninitialize();
+    }
+    result->Error("save_failed", "Unable to create the Windows save dialog.");
+    return;
+  }
+
+  DWORD options = 0;
+  dialog->GetOptions(&options);
+  options |= FOS_FORCEFILESYSTEM | FOS_OVERWRITEPROMPT;
+  dialog->SetOptions(options);
+
+  const std::string* title = LookupString(map, "title");
+  std::wstring title_wide;
+  if (title != nullptr && !title->empty()) {
+    title_wide = Utf8ToWide(*title);
+    dialog->SetTitle(title_wide.c_str());
+  }
+
+  const std::wstring suggested_name_wide = Utf8ToWide(*suggested_name);
+  dialog->SetFileName(suggested_name_wide.c_str());
+
+  const std::string* initial_directory = LookupString(map, "initialDirectory");
+  ComPtr<IShellItem> initial_folder;
+  std::wstring initial_directory_wide;
+  if (initial_directory != nullptr && !initial_directory->empty()) {
+    initial_directory_wide = Utf8ToWide(*initial_directory);
+    if (SUCCEEDED(SHCreateItemFromParsingName(
+            initial_directory_wide.c_str(), nullptr,
+            IID_PPV_ARGS(&initial_folder)))) {
+      dialog->SetFolder(initial_folder.Get());
+    }
+  }
+
+  std::vector<std::string> extensions = LookupExtensions(map);
+  std::wstring filter_pattern = BuildFilterPattern(extensions);
+  const COMDLG_FILTERSPEC filters[] = {
+      {L"Allowed files", filter_pattern.c_str()},
+      {L"All files", L"*.*"},
+  };
+  if (!extensions.empty()) {
+    dialog->SetFileTypes(2, filters);
+    const std::wstring default_extension = Utf8ToWide(extensions.front());
+    dialog->SetDefaultExtension(default_extension.c_str());
+  }
+
+  hr = dialog->Show(nullptr);
+  if (hr == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
+    if (should_uninitialize) {
+      CoUninitialize();
+    }
+    result->Success();
+    return;
+  }
+  if (FAILED(hr)) {
+    if (should_uninitialize) {
+      CoUninitialize();
+    }
+    result->Error("save_failed", "Windows save dialog failed.");
+    return;
+  }
+
+  ComPtr<IShellItem> item;
+  hr = dialog->GetResult(&item);
+  if (FAILED(hr)) {
+    if (should_uninitialize) {
+      CoUninitialize();
+    }
+    result->Error("save_failed", "Unable to resolve the selected save path.");
+    return;
+  }
+
+  PWSTR raw_path = nullptr;
+  if (FAILED(item->GetDisplayName(SIGDN_FILESYSPATH, &raw_path))) {
+    if (should_uninitialize) {
+      CoUninitialize();
+    }
+    result->Error("save_failed", "Unable to resolve the selected save path.");
+    return;
+  }
+
+  fs::path path = fs::path(raw_path);
+  CoTaskMemFree(raw_path);
+
+  std::ofstream file(path, std::ios::binary | std::ios::trunc);
+  if (!file.is_open()) {
+    if (should_uninitialize) {
+      CoUninitialize();
+    }
+    result->Error(kWriteFailed, "Unable to open the selected file for writing.",
+                  EncodableValue(path.u8string()));
+    return;
+  }
+  if (!bytes->empty()) {
+    file.write(reinterpret_cast<const char*>(bytes->data()),
+               static_cast<std::streamsize>(bytes->size()));
+  }
+  file.close();
+  if (!file) {
+    if (should_uninitialize) {
+      CoUninitialize();
+    }
+    result->Error(kWriteFailed, "Unable to write the selected file.",
+                  EncodableValue(path.u8string()));
+    return;
+  }
+
+  if (should_uninitialize) {
+    CoUninitialize();
+  }
+  result->Success(SerializeFileEntry(path));
 }
 
 void FilegatePlugin::Pick(

@@ -92,5 +92,50 @@ TEST(FilegatePlugin, PickUnknownModeReturnsInvalidArgs) {
                "invalid_args");
 }
 
+TEST(FilegatePlugin, SaveMissingBytesReturnsInvalidArgs) {
+  g_autoptr(FlValue) arguments = fl_value_new_map();
+  fl_value_set_string_take(arguments, "suggestedName",
+                           fl_value_new_string("export.txt"));
+
+  g_autoptr(FlMethodResponse) response = filegate_save_file(arguments);
+  ASSERT_NE(response, nullptr);
+  ASSERT_TRUE(FL_IS_METHOD_ERROR_RESPONSE(response));
+  EXPECT_STREQ(fl_method_error_response_get_code(
+                   FL_METHOD_ERROR_RESPONSE(response)),
+               "invalid_args");
+}
+
+TEST(FilegatePlugin, SaveMissingNameReturnsInvalidArgs) {
+  const uint8_t bytes[] = {1, 2, 3};
+  g_autoptr(FlValue) arguments = fl_value_new_map();
+  fl_value_set_string_take(
+      arguments, "bytes",
+      fl_value_new_uint8_list(bytes, sizeof(bytes) / sizeof(uint8_t)));
+
+  g_autoptr(FlMethodResponse) response = filegate_save_file(arguments);
+  ASSERT_NE(response, nullptr);
+  ASSERT_TRUE(FL_IS_METHOD_ERROR_RESPONSE(response));
+  EXPECT_STREQ(fl_method_error_response_get_code(
+                   FL_METHOD_ERROR_RESPONSE(response)),
+               "invalid_args");
+}
+
+TEST(FilegatePlugin, SaveBlankNameReturnsInvalidArgs) {
+  const uint8_t bytes[] = {1, 2, 3};
+  g_autoptr(FlValue) arguments = fl_value_new_map();
+  fl_value_set_string_take(
+      arguments, "bytes",
+      fl_value_new_uint8_list(bytes, sizeof(bytes) / sizeof(uint8_t)));
+  fl_value_set_string_take(arguments, "suggestedName",
+                           fl_value_new_string("   "));
+
+  g_autoptr(FlMethodResponse) response = filegate_save_file(arguments);
+  ASSERT_NE(response, nullptr);
+  ASSERT_TRUE(FL_IS_METHOD_ERROR_RESPONSE(response));
+  EXPECT_STREQ(fl_method_error_response_get_code(
+                   FL_METHOD_ERROR_RESPONSE(response)),
+               "invalid_args");
+}
+
 }  // namespace test
 }  // namespace filegate

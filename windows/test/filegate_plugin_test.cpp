@@ -117,5 +117,43 @@ TEST(FilegatePlugin, PickUnknownModeReturnsInvalidArgs) {
   EXPECT_EQ(result.error_code, "invalid_args");
 }
 
+TEST(FilegatePlugin, SaveMissingBytesReturnsInvalidArgs) {
+  FilegatePlugin plugin;
+  EncodableMap arguments = {
+      {EncodableValue("suggestedName"), EncodableValue("export.txt")},
+  };
+
+  MethodCallResult result =
+      Invoke(&plugin, "save", std::make_unique<EncodableValue>(arguments));
+
+  EXPECT_EQ(result.error_code, "invalid_args");
+}
+
+TEST(FilegatePlugin, SavePathNameReturnsInvalidArgs) {
+  FilegatePlugin plugin;
+  EncodableMap arguments = {
+      {EncodableValue("bytes"), EncodableValue(std::vector<uint8_t>{1, 2, 3})},
+      {EncodableValue("suggestedName"), EncodableValue("nested/export.txt")},
+  };
+
+  MethodCallResult result =
+      Invoke(&plugin, "save", std::make_unique<EncodableValue>(arguments));
+
+  EXPECT_EQ(result.error_code, "invalid_args");
+}
+
+TEST(FilegatePlugin, SaveBlankNameReturnsInvalidArgs) {
+  FilegatePlugin plugin;
+  EncodableMap arguments = {
+      {EncodableValue("bytes"), EncodableValue(std::vector<uint8_t>{1, 2, 3})},
+      {EncodableValue("suggestedName"), EncodableValue("   ")},
+  };
+
+  MethodCallResult result =
+      Invoke(&plugin, "save", std::make_unique<EncodableValue>(arguments));
+
+  EXPECT_EQ(result.error_code, "invalid_args");
+}
+
 }  // namespace test
 }  // namespace filegate

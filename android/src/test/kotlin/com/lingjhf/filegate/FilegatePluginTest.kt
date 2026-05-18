@@ -30,6 +30,27 @@ internal class FilegatePluginTest {
     }
 
     @Test
+    fun onMethodCall_saveWithoutActivity_returnsNoActivity() {
+        val plugin = FilegatePlugin()
+
+        val call = MethodCall(
+            "save",
+            mapOf(
+                "bytes" to byteArrayOf(1, 2, 3),
+                "suggestedName" to "export.txt"
+            )
+        )
+        val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+        plugin.onMethodCall(call, mockResult)
+
+        Mockito.verify(mockResult).error(
+            "no_activity",
+            "File saver requires a foreground activity.",
+            null
+        )
+    }
+
+    @Test
     fun fileReadStreamHandler_keepsChannelUntilFlutterCancelsAfterEnd() {
         var disposeCount = 0
         val handler = FilegatePlugin.FileReadStreamHandler(

@@ -23,6 +23,8 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
     switch call.method {
     case "pick":
       pick(arguments: call.arguments as? [String: Any], result: result)
+    case "save":
+      save(arguments: call.arguments as? [String: Any], result: result)
     case "getFileSize":
       getFileSize(arguments: call.arguments as? [String: Any], result: result)
     case "startRead":
@@ -113,6 +115,53 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
         result(FlutterError(code: error.code, message: error.message, details: error.details))
       } catch {
         result(FlutterError(code: "enumeration_failed", message: error.localizedDescription, details: nil))
+      }
+    }
+  }
+
+  private func save(arguments: [String: Any]?, result: @escaping FlutterResult) {
+    DispatchQueue.main.async {
+      guard let typedData = arguments?["bytes"] as? FlutterStandardTypedData else {
+        result(FlutterError(code: "invalid_args", message: "A byte payload is required.", details: nil))
+        return
+      }
+      guard let suggestedName = arguments?["suggestedName"] as? String,
+            Self.isValidFileName(suggestedName) else {
+        result(FlutterError(code: "invalid_args", message: "A non-empty file name is required.", details: nil))
+        return
+      }
+
+      let title = arguments?["title"] as? String
+      let initialDirectory = arguments?["initialDirectory"] as? String
+      let allowedExtensions = arguments?["allowedExtensions"] as? [String] ?? []
+
+      let panel = NSSavePanel()
+      panel.canCreateDirectories = true
+      panel.nameFieldStringValue = suggestedName
+
+      if let title, !title.isEmpty {
+        panel.title = title
+      }
+
+      if let initialDirectory, !initialDirectory.isEmpty {
+        panel.directoryURL = URL(fileURLWithPath: initialDirectory, isDirectory: true)
+      }
+
+      let normalizedExtensions = Self.normalizeExtensions(allowedExtensions)
+      if !normalizedExtensions.isEmpty {
+        panel.allowedFileTypes = normalizedExtensions
+      }
+
+      guard panel.runModal() == .OK, let url = panel.url else {
+        result(nil)
+        return
+      }
+
+      do {
+        try typedData.data.write(to: url, options: .atomic)
+        result(Self.serializeEntry(url))
+      } catch {
+        result(FlutterError(code: "write_failed", message: error.localizedDescription, details: url.path))
       }
     }
   }
@@ -324,6 +373,11 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
       }
     }
     return normalized
+  }
+
+  private static func isValidFileName(_ value: String) -> Bool {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return !trimmed.isEmpty && !value.contains("/") && !value.contains("\\")
   }
 
   private static func metadataForFile(_ url: URL) -> [String: Any] {
