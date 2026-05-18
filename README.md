@@ -186,6 +186,18 @@ if (saved != null) {
 }
 ```
 
+### Append bytes to an existing file
+
+```dart
+final updated = await filegate.writeFile(
+  '/path/to/file.txt',
+  Uint8List.fromList('more\n'.codeUnits),
+  mode: FilegateWriteMode.append,
+);
+
+print(updated.size);
+```
+
 ### Read with progress
 
 ```dart
@@ -243,6 +255,7 @@ Methods:
 - `pickMixed(...)`: Picks files and directories where supported.
 - `saveFile(...)`: Saves an in-memory byte payload through a native save/export
   dialog.
+- `writeFile(...)`: Replaces or appends bytes to an existing file path or URI.
 - `getFileSize(String path)`: Returns a file size when known.
 - `openRead(String path, {int chunkSize, int start, int? end})`: Opens a
   cancellable byte stream. `start` is inclusive and `end` is exclusive.
@@ -312,6 +325,7 @@ Fields:
 - `supportsPersistedAccess`
 - `supportsNativeUriRead`
 - `supportsFileSaving`
+- `supportsFileWriting`
 
 ## Errors
 

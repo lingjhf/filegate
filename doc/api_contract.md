@@ -58,8 +58,23 @@ semantics below unless a future changelog calls out a breaking change.
   are used as platform save dialog filters where the platform supports them.
 - Save results should include best-effort metadata for the saved file when the
   platform can provide it.
-- Direct save is one-shot and memory-backed. Streaming save and append/resume
-  behavior are intentionally outside this contract.
+- Direct save is one-shot and memory-backed. It creates or replaces the target
+  chosen by the platform save/export UI.
+
+## Writing
+
+- `writeFile(path, bytes, mode: mode)` writes to an existing file path or URI
+  without opening a picker.
+- `FilegateWriteMode.replace` truncates the target before writing.
+- `FilegateWriteMode.append` writes at the end of the existing target.
+- Empty byte payloads are valid. Replace mode truncates to an empty file, and
+  append mode leaves the file contents unchanged.
+- If the target does not exist, is a directory, or cannot be accessed, native
+  implementations surface the corresponding `FilegateErrorCode`.
+- Write results should include best-effort metadata for the updated file when
+  the platform can provide it.
+- Streaming writes and append-through-save-dialog behavior are intentionally
+  outside this contract.
 
 ## Directory listing
 

@@ -28,6 +28,19 @@ class Filegate {
     return FilegatePlatform.instance.save(options);
   }
 
+  Future<PickedEntry> write(FilegateWriteOptions options) {
+    _validateWriteOptions(options);
+    return FilegatePlatform.instance.write(options);
+  }
+
+  Future<PickedEntry> writeFile(
+    String path,
+    Uint8List bytes, {
+    FilegateWriteMode mode = FilegateWriteMode.replace,
+  }) {
+    return write(FilegateWriteOptions(path: path, bytes: bytes, mode: mode));
+  }
+
   Future<PickedEntry?> saveFile(
     Uint8List bytes, {
     required String suggestedName,
@@ -377,6 +390,12 @@ void _validateSaveOptions(FilegateSaveOptions options) {
       'suggestedName',
       'suggestedName must be a file name, not a path',
     );
+  }
+}
+
+void _validateWriteOptions(FilegateWriteOptions options) {
+  if (options.path.isEmpty) {
+    throw ArgumentError.value(options.path, 'path', 'path must not be empty');
   }
 }
 

@@ -17,6 +17,7 @@ void main() {
   final List<MethodCall> methodCalls = <MethodCall>[];
   Object? pickResponse;
   Object? saveResponse;
+  Object? writeResponse;
   String startReadResponse = 'stream-1';
   Completer<String>? startReadCompleter;
   Object? eventPayload = Uint8List.fromList(const [1, 2, 3]);
@@ -50,6 +51,16 @@ void main() {
         'mimeType': 'text/plain',
       },
     };
+    writeResponse = {
+      'path': '/tmp/export.txt',
+      'name': 'export.txt',
+      'kind': 'file',
+      'metadata': {
+        'size': 6,
+        'modifiedAt': 1778893200000,
+        'mimeType': 'text/plain',
+      },
+    };
     startReadResponse = 'stream-1';
     startReadCompleter = null;
     eventPayload = Uint8List.fromList(const [1, 2, 3]);
@@ -66,6 +77,10 @@ void main() {
 
           if (methodCall.method == 'save') {
             return saveResponse;
+          }
+
+          if (methodCall.method == 'write') {
+            return writeResponse;
           }
 
           if (methodCall.method == 'getFileSize') {
@@ -213,6 +228,7 @@ void main() {
     expect(capabilities.supportsPersistedAccess, isTrue);
     expect(capabilities.supportsNativeUriRead, isTrue);
     expect(capabilities.supportsFileSaving, isTrue);
+    expect(capabilities.supportsFileWriting, isTrue);
   });
 
   test('capabilities describe Apple mixed picker support', () {
@@ -224,9 +240,11 @@ void main() {
     expect(iosCapabilities.supportsMixedPicking, isTrue);
     expect(iosCapabilities.supportsNativeUriRead, isTrue);
     expect(iosCapabilities.supportsFileSaving, isTrue);
+    expect(iosCapabilities.supportsFileWriting, isTrue);
     expect(macosCapabilities.supportsMixedPicking, isTrue);
     expect(macosCapabilities.supportsNativeUriRead, isFalse);
     expect(macosCapabilities.supportsFileSaving, isTrue);
+    expect(macosCapabilities.supportsFileWriting, isTrue);
   });
 
   test('capabilities describe desktop picker limits', () {
@@ -238,9 +256,11 @@ void main() {
     expect(windowsCapabilities.supportsMixedPicking, isFalse);
     expect(windowsCapabilities.supportsPersistedAccess, isTrue);
     expect(windowsCapabilities.supportsFileSaving, isTrue);
+    expect(windowsCapabilities.supportsFileWriting, isTrue);
     expect(linuxCapabilities.supportsMixedPicking, isFalse);
     expect(linuxCapabilities.supportsPersistedAccess, isTrue);
     expect(linuxCapabilities.supportsFileSaving, isTrue);
+    expect(linuxCapabilities.supportsFileWriting, isTrue);
   });
 
   test('capabilities are disabled for unknown operating systems', () {
@@ -255,6 +275,7 @@ void main() {
     expect(capabilities.supportsPersistedAccess, isFalse);
     expect(capabilities.supportsNativeUriRead, isFalse);
     expect(capabilities.supportsFileSaving, isFalse);
+    expect(capabilities.supportsFileWriting, isFalse);
   });
 
   test('pick rejects invalid native entry payloads', () async {
@@ -332,6 +353,49 @@ void main() {
     await expectLater(
       platform.save(
         FilegateSaveOptions(bytes: Uint8List(0), suggestedName: 'export.txt'),
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
+  test('write encodes payloads and decodes native entries', () async {
+    final result = await platform.write(
+      FilegateWriteOptions(
+        path: '/tmp/export.txt',
+        bytes: Uint8List.fromList(const [4, 5, 6]),
+        mode: FilegateWriteMode.append,
+      ),
+    );
+
+    expect(result.path, '/tmp/export.txt');
+    expect(result.name, 'export.txt');
+    expect(result.kind, PickedEntryKind.file);
+    expect(result.size, 6);
+    expect(result.mimeType, 'text/plain');
+
+    final arguments =
+        methodCalls.firstWhere((call) => call.method == 'write').arguments
+            as Map<Object?, Object?>;
+    expect(arguments, containsPair('path', '/tmp/export.txt'));
+    expect(arguments, containsPair('mode', 'append'));
+    expect(arguments['bytes'], Uint8List.fromList(const [4, 5, 6]));
+  });
+
+  test('write validates paths before touching the channel', () async {
+    await expectLater(
+      platform.write(FilegateWriteOptions(path: '', bytes: Uint8List(0))),
+      throwsA(isA<ArgumentError>()),
+    );
+
+    expect(methodCalls.where((call) => call.method == 'write'), isEmpty);
+  });
+
+  test('write rejects invalid native entry payloads', () async {
+    writeResponse = null;
+
+    await expectLater(
+      platform.write(
+        FilegateWriteOptions(path: '/tmp/export.txt', bytes: Uint8List(0)),
       ),
       throwsA(isA<ArgumentError>()),
     );

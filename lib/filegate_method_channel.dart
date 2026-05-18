@@ -38,6 +38,7 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsPersistedAccess: true,
         supportsNativeUriRead: true,
         supportsFileSaving: true,
+        supportsFileWriting: true,
       ),
       'ios' => const FilegateCapabilities(
         supportsFilePicking: true,
@@ -47,6 +48,7 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsPersistedAccess: false,
         supportsNativeUriRead: true,
         supportsFileSaving: true,
+        supportsFileWriting: true,
       ),
       'macos' => const FilegateCapabilities(
         supportsFilePicking: true,
@@ -56,6 +58,7 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsPersistedAccess: true,
         supportsNativeUriRead: false,
         supportsFileSaving: true,
+        supportsFileWriting: true,
       ),
       'windows' => const FilegateCapabilities(
         supportsFilePicking: true,
@@ -65,6 +68,7 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsPersistedAccess: true,
         supportsNativeUriRead: false,
         supportsFileSaving: true,
+        supportsFileWriting: true,
       ),
       'linux' => const FilegateCapabilities(
         supportsFilePicking: true,
@@ -74,6 +78,7 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsPersistedAccess: true,
         supportsNativeUriRead: false,
         supportsFileSaving: true,
+        supportsFileWriting: true,
       ),
       _ => const FilegateCapabilities(
         supportsFilePicking: false,
@@ -135,6 +140,20 @@ class MethodChannelFilegate extends FilegatePlatform {
     }
 
     return PickedEntry.fromMap(entry);
+  }
+
+  @override
+  Future<PickedEntry> write(FilegateWriteOptions options) async {
+    if (options.path.isEmpty) {
+      throw ArgumentError.value(options.path, 'path', 'path must not be empty');
+    }
+
+    final entry = await methodChannel.invokeMapMethod<Object?, Object?>(
+      'write',
+      options.toMap(),
+    );
+
+    return PickedEntry.fromMap(_castMap(entry));
   }
 
   @override

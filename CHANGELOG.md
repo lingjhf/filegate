@@ -6,6 +6,8 @@
 
 - Added a direct file save API contract for writing in-memory bytes through
   native save/export dialogs across supported platforms.
+- Added a direct file write API contract for replacing or appending bytes to
+  existing files across supported platforms.
 
 ### Fixed
 

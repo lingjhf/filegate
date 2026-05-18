@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 enum FilegateSelectionMode { filesOnly, directoriesOnly, filesAndDirectories }
 
+enum FilegateWriteMode { replace, append }
+
 enum PickedEntryKind { file, directory }
 
 enum FilegateLocationKind { platformPath, fileUri, contentUri, otherUri }
@@ -56,6 +58,7 @@ class FilegateCapabilities {
     required this.supportsPersistedAccess,
     required this.supportsNativeUriRead,
     this.supportsFileSaving = false,
+    this.supportsFileWriting = false,
   });
 
   final bool supportsFilePicking;
@@ -65,6 +68,7 @@ class FilegateCapabilities {
   final bool supportsPersistedAccess;
   final bool supportsNativeUriRead;
   final bool supportsFileSaving;
+  final bool supportsFileWriting;
 
   Map<String, Object?> toMap() {
     return {
@@ -75,6 +79,7 @@ class FilegateCapabilities {
       'supportsPersistedAccess': supportsPersistedAccess,
       'supportsNativeUriRead': supportsNativeUriRead,
       'supportsFileSaving': supportsFileSaving,
+      'supportsFileWriting': supportsFileWriting,
     };
   }
 
@@ -86,6 +91,7 @@ class FilegateCapabilities {
     final supportsPersistedAccess = map['supportsPersistedAccess'];
     final supportsNativeUriRead = map['supportsNativeUriRead'];
     final supportsFileSaving = map['supportsFileSaving'];
+    final supportsFileWriting = map['supportsFileWriting'];
 
     if (supportsFilePicking is! bool ||
         supportsDirectoryPicking is! bool ||
@@ -93,7 +99,8 @@ class FilegateCapabilities {
         supportsInitialDirectory is! bool ||
         supportsPersistedAccess is! bool ||
         supportsNativeUriRead is! bool ||
-        (supportsFileSaving != null && supportsFileSaving is! bool)) {
+        (supportsFileSaving != null && supportsFileSaving is! bool) ||
+        (supportsFileWriting != null && supportsFileWriting is! bool)) {
       throw ArgumentError.value(map, 'map', 'Invalid capabilities payload');
     }
 
@@ -105,6 +112,7 @@ class FilegateCapabilities {
       supportsPersistedAccess: supportsPersistedAccess,
       supportsNativeUriRead: supportsNativeUriRead,
       supportsFileSaving: supportsFileSaving as bool? ?? false,
+      supportsFileWriting: supportsFileWriting as bool? ?? false,
     );
   }
 }
@@ -184,6 +192,22 @@ class FilegateSaveOptions {
       'initialDirectory': initialDirectory,
       'mimeType': mimeType,
     };
+  }
+}
+
+class FilegateWriteOptions {
+  const FilegateWriteOptions({
+    required this.path,
+    required this.bytes,
+    this.mode = FilegateWriteMode.replace,
+  });
+
+  final String path;
+  final Uint8List bytes;
+  final FilegateWriteMode mode;
+
+  Map<String, Object?> toMap() {
+    return {'path': path, 'bytes': bytes, 'mode': mode.name};
   }
 }
 

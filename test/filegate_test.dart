@@ -13,6 +13,7 @@ class MockFilegatePlatform
     implements FilegatePlatform {
   FilegatePickOptions? lastOptions;
   FilegateSaveOptions? lastSaveOptions;
+  FilegateWriteOptions? lastWriteOptions;
   int? fileSize = 123;
   List<Uint8List> chunks = <Uint8List>[
     Uint8List.fromList(const [1, 2, 3]),
@@ -32,6 +33,7 @@ class MockFilegatePlatform
     supportsPersistedAccess: true,
     supportsNativeUriRead: true,
     supportsFileSaving: true,
+    supportsFileWriting: true,
   );
 
   @override
@@ -58,6 +60,19 @@ class MockFilegatePlatform
       PickedEntry(
         path: '/tmp/${options.suggestedName}',
         name: options.suggestedName,
+        kind: PickedEntryKind.file,
+        metadata: PickedEntryMetadata(size: options.bytes.length),
+      ),
+    );
+  }
+
+  @override
+  Future<PickedEntry> write(FilegateWriteOptions options) {
+    lastWriteOptions = options;
+    return Future.value(
+      PickedEntry(
+        path: options.path,
+        name: options.path.replaceAll(r'\', '/').split('/').last,
         kind: PickedEntryKind.file,
         metadata: PickedEntryMetadata(size: options.bytes.length),
       ),
@@ -128,6 +143,12 @@ void main() {
       throwsA(isA<UnimplementedError>()),
     );
     expect(
+      () => platform.write(
+        FilegateWriteOptions(path: '/tmp/example.txt', bytes: Uint8List(0)),
+      ),
+      throwsA(isA<UnimplementedError>()),
+    );
+    expect(
       () => platform.getFileSize('/tmp/example.txt'),
       throwsA(isA<UnimplementedError>()),
     );
@@ -192,6 +213,37 @@ void main() {
     },
   );
 
+  test('write delegates to the active platform', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    FilegatePlatform.instance = fakePlatform;
+
+    final result = await filegatePlugin.writeFile(
+      '/tmp/export.txt',
+      Uint8List.fromList(const [1, 2, 3]),
+      mode: FilegateWriteMode.append,
+    );
+
+    expect(result.path, '/tmp/export.txt');
+    expect(result.name, 'export.txt');
+    expect(result.size, 3);
+    expect(fakePlatform.lastWriteOptions!.path, '/tmp/export.txt');
+    expect(fakePlatform.lastWriteOptions!.bytes, const [1, 2, 3]);
+    expect(fakePlatform.lastWriteOptions!.mode, FilegateWriteMode.append);
+  });
+
+  test('write validates paths before touching platform', () {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    FilegatePlatform.instance = fakePlatform;
+
+    expect(
+      () => filegatePlugin.writeFile('', Uint8List(0)),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(fakePlatform.lastWriteOptions, isNull);
+  });
+
   test('openRead delegates to the active platform', () async {
     const filegatePlugin = Filegate();
     final fakePlatform = MockFilegatePlatform();
@@ -229,6 +281,7 @@ void main() {
     expect(capabilities.supportsMixedPicking, isFalse);
     expect(capabilities.supportsNativeUriRead, isTrue);
     expect(capabilities.supportsFileSaving, isTrue);
+    expect(capabilities.supportsFileWriting, isTrue);
   });
 
   test('capabilities round-trip map payloads', () {
@@ -240,6 +293,7 @@ void main() {
       supportsPersistedAccess: true,
       supportsNativeUriRead: false,
       supportsFileSaving: true,
+      supportsFileWriting: true,
     );
 
     final restored = FilegateCapabilities.fromMap(capabilities.toMap());
@@ -260,10 +314,11 @@ void main() {
     );
     expect(restored.supportsNativeUriRead, capabilities.supportsNativeUriRead);
     expect(restored.supportsFileSaving, capabilities.supportsFileSaving);
+    expect(restored.supportsFileWriting, capabilities.supportsFileWriting);
   });
 
   test(
-    'capabilities default file saving support to false for old payloads',
+    'capabilities default file save and write support to false for old payloads',
     () {
       final restored = FilegateCapabilities.fromMap(const {
         'supportsFilePicking': true,
@@ -275,6 +330,7 @@ void main() {
       });
 
       expect(restored.supportsFileSaving, isFalse);
+      expect(restored.supportsFileWriting, isFalse);
     },
   );
 
@@ -312,6 +368,21 @@ void main() {
       'title': 'Export',
       'initialDirectory': '/tmp',
       'mimeType': 'text/plain',
+    });
+  });
+
+  test('write options encode channel payloads', () {
+    final bytes = Uint8List.fromList(const [4, 5, 6]);
+    final options = FilegateWriteOptions(
+      path: '/tmp/export.txt',
+      bytes: bytes,
+      mode: FilegateWriteMode.append,
+    );
+
+    expect(options.toMap(), {
+      'path': '/tmp/export.txt',
+      'bytes': bytes,
+      'mode': 'append',
     });
   });
 
