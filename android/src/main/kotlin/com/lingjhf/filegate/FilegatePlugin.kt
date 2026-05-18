@@ -21,6 +21,7 @@ import io.flutter.plugin.common.PluginRegistry
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.UUID
 import java.util.concurrent.Executors
@@ -56,6 +57,7 @@ class FilegatePlugin :
         when (call.method) {
             "pick" -> pick(call.arguments as? Map<*, *>, result)
             "save" -> save(call.arguments as? Map<*, *>, result)
+            "write" -> write(call.arguments as? Map<*, *>, result)
             "getFileSize" -> getFileSize(call.arguments as? Map<*, *>, result)
             "startRead" -> startRead(call.arguments as? Map<*, *>, result)
             "cancelRead" -> cancelRead(call.arguments as? Map<*, *>, result)
@@ -283,6 +285,44 @@ class FilegatePlugin :
         currentActivity.startActivityForResult(intent, requestCodeSave)
     }
 
+    private fun write(arguments: Map<*, *>?, result: Result) {
+        val path = arguments?.get("path") as? String
+        if (path.isNullOrEmpty()) {
+            result.error("invalid_args", "A non-empty file path is required.", null)
+            return
+        }
+
+        val bytes = arguments["bytes"] as? ByteArray
+        if (bytes == null) {
+            result.error("invalid_args", "A byte payload is required.", null)
+            return
+        }
+
+        val mode = arguments["mode"] as? String ?: "replace"
+        if (mode != "replace" && mode != "append") {
+            result.error("invalid_args", "Unknown write mode: $mode.", null)
+            return
+        }
+
+        try {
+            if (path.startsWith("content://")) {
+                result.success(writeContentUri(Uri.parse(path), bytes, mode, path))
+                return
+            }
+
+            val file = localFileForIdentifier(path)
+            result.success(writeLocalFile(file, bytes, mode, path))
+        } catch (error: FilegateError) {
+            result.error(error.code, error.message, error.details)
+        } catch (error: FileNotFoundException) {
+            result.error("path_not_found", error.localizedMessage, path)
+        } catch (error: SecurityException) {
+            result.error("permission_denied", error.localizedMessage, path)
+        } catch (error: Exception) {
+            result.error("write_failed", error.localizedMessage, path)
+        }
+    }
+
     private fun startRead(arguments: Map<*, *>?, result: Result) {
         val path = arguments?.get("path") as? String
         if (path.isNullOrEmpty()) {
@@ -402,12 +442,22 @@ class FilegatePlugin :
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, allowMultiple)
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            )
             maybePutInitialUri(initialDirectory)
         }
     }
 
     private fun buildOpenDocumentTreeIntent(initialDirectory: String?): Intent {
         return Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            )
             maybePutInitialUri(initialDirectory)
         }
     }
@@ -558,6 +608,26 @@ class FilegatePlugin :
         return mapOf(
             "path" to uri.toString(),
             "name" to name,
+            "kind" to "file",
+            "relativePath" to relativePath,
+            "metadata" to metadata
+        )
+    }
+
+    private fun serializeLocalFileEntry(
+        file: File,
+        relativePath: String = file.name
+    ): Map<String, Any?> {
+        val metadata = mutableMapOf<String, Any?>()
+        metadata["size"] = file.length()
+        val modifiedAt = file.lastModified()
+        if (modifiedAt > 0L) {
+            metadata["modifiedAt"] = modifiedAt
+        }
+
+        return mapOf(
+            "path" to file.path,
+            "name" to file.name,
             "kind" to "file",
             "relativePath" to relativePath,
             "metadata" to metadata
@@ -768,6 +838,68 @@ class FilegatePlugin :
             }
         }
         return null
+    }
+
+    private fun writeContentUri(
+        uri: Uri,
+        bytes: ByteArray,
+        mode: String,
+        originalPath: String
+    ): Map<String, Any?> {
+        val document = DocumentFile.fromSingleUri(applicationContext, uri)
+        if (document != null) {
+            if (!document.exists()) {
+                throw FilegateError("path_not_found", "The provided path does not exist.", originalPath)
+            }
+            if (document.isDirectory) {
+                throw FilegateError("not_a_file", "The provided path is a directory, not a file.", originalPath)
+            }
+        }
+
+        val resolverMode = if (mode == "append") "wa" else "wt"
+        applicationContext.contentResolver.openOutputStream(uri, resolverMode)?.use { outputStream ->
+            outputStream.write(bytes)
+            outputStream.flush()
+        } ?: throw FilegateError("write_failed", "Unable to open the provided content URI for writing.", originalPath)
+
+        val updatedDocument = DocumentFile.fromSingleUri(applicationContext, uri)
+        val name = updatedDocument?.name ?: queryDisplayName(uri) ?: uri.lastPathSegment ?: uri.toString()
+        return serializeFileEntry(
+            uri,
+            name,
+            metadata = metadataForDocument(updatedDocument, uri)
+        )
+    }
+
+    private fun writeLocalFile(
+        file: File,
+        bytes: ByteArray,
+        mode: String,
+        originalPath: String
+    ): Map<String, Any?> {
+        if (!file.exists()) {
+            throw FilegateError("path_not_found", "The provided path does not exist.", originalPath)
+        }
+        if (file.isDirectory) {
+            throw FilegateError("not_a_file", "The provided path is a directory, not a file.", originalPath)
+        }
+
+        FileOutputStream(file, mode == "append").use { outputStream ->
+            outputStream.write(bytes)
+            outputStream.flush()
+        }
+
+        return serializeLocalFileEntry(file)
+    }
+
+    private fun localFileForIdentifier(identifier: String): File {
+        if (identifier.startsWith("file://")) {
+            val uri = Uri.parse(identifier)
+            val path = uri.path
+                ?: throw FilegateError("path_not_found", "The provided file URI has no path.", identifier)
+            return File(path)
+        }
+        return File(identifier)
     }
 
     private data class PendingPick(

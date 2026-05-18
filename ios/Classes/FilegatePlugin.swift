@@ -31,6 +31,8 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       pick(arguments: call.arguments as? [String: Any], result: result)
     case "save":
       save(arguments: call.arguments as? [String: Any], result: result)
+    case "write":
+      write(arguments: call.arguments as? [String: Any], result: result)
     case "getFileSize":
       getFileSize(arguments: call.arguments as? [String: Any], result: result)
     case "startRead":
@@ -181,6 +183,63 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     pendingSaveTemporaryDirectoryURL = temporaryDirectory
 
     presenter.present(picker, animated: true)
+  }
+
+  private func write(arguments: [String: Any]?, result: @escaping FlutterResult) {
+    guard let path = arguments?["path"] as? String, !path.isEmpty else {
+      result(FlutterError(code: "invalid_args", message: "A non-empty file path is required.", details: nil))
+      return
+    }
+    guard let typedData = arguments?["bytes"] as? FlutterStandardTypedData else {
+      result(FlutterError(code: "invalid_args", message: "A byte payload is required.", details: nil))
+      return
+    }
+    let mode = arguments?["mode"] as? String ?? "replace"
+    guard mode == "replace" || mode == "append" else {
+      result(FlutterError(code: "invalid_args", message: "Unknown write mode: \(mode).", details: nil))
+      return
+    }
+
+    let fileURL = resolveURL(from: path)
+    let temporaryAccess = fileURL.startAccessingSecurityScopedResource()
+    if !temporaryAccess && !FileManager.default.fileExists(atPath: fileURL.path) {
+      result(FlutterError(code: "path_not_found", message: "The provided path does not exist.", details: path))
+      return
+    }
+    if !temporaryAccess && !FileManager.default.isWritableFile(atPath: fileURL.path) {
+      result(FlutterError(code: "security_scope_failed", message: "Unable to access the selected file in the current session.", details: path))
+      return
+    }
+
+    defer {
+      if temporaryAccess {
+        fileURL.stopAccessingSecurityScopedResource()
+      }
+    }
+
+    do {
+      let resourceValues = try fileURL.resourceValues(forKeys: [.isDirectoryKey])
+      if resourceValues.isDirectory == true {
+        result(FlutterError(code: "not_a_file", message: "The provided path is a directory, not a file.", details: path))
+        return
+      }
+
+      let handle = try FileHandle(forWritingTo: fileURL)
+      defer {
+        try? handle.close()
+      }
+
+      if mode == "append" {
+        handle.seekToEndOfFile()
+      } else {
+        handle.truncateFile(atOffset: 0)
+        handle.seek(toFileOffset: 0)
+      }
+      handle.write(typedData.data)
+      result(serializeFileEntry(fileURL))
+    } catch {
+      result(FlutterError(code: "write_failed", message: error.localizedDescription, details: path))
+    }
   }
 
   private func startRead(arguments: [String: Any]?, result: @escaping FlutterResult) {

@@ -342,6 +342,8 @@ void FilegatePlugin::HandleMethodCall(
     Pick(method_call.arguments(), std::move(result));
   } else if (method_call.method_name().compare("save") == 0) {
     Save(method_call.arguments(), std::move(result));
+  } else if (method_call.method_name().compare("write") == 0) {
+    Write(method_call.arguments(), std::move(result));
   } else if (method_call.method_name().compare("getFileSize") == 0) {
     GetFileSize(method_call.arguments(), std::move(result));
   } else {
@@ -378,6 +380,74 @@ void FilegatePlugin::GetFileSize(
   }
 
   result->Success(EncodableValue(static_cast<int64_t>(size)));
+}
+
+void FilegatePlugin::Write(
+    const flutter::EncodableValue* arguments,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const EncodableMap* map = GetArgumentsMap(arguments);
+  const std::string* path_value = LookupString(map, "path");
+  if (path_value == nullptr || path_value->empty()) {
+    result->Error(kInvalidArgs, "A non-empty file path is required.");
+    return;
+  }
+
+  const std::vector<uint8_t>* bytes = LookupBytes(map, "bytes");
+  if (bytes == nullptr) {
+    result->Error(kInvalidArgs, "A byte payload is required.",
+                  EncodableValue(*path_value));
+    return;
+  }
+
+  const std::string* mode_value = LookupString(map, "mode");
+  const std::string mode = mode_value == nullptr ? "replace" : *mode_value;
+  if (mode != "replace" && mode != "append") {
+    result->Error(kInvalidArgs, "Unknown write mode.", EncodableValue(mode));
+    return;
+  }
+
+  std::error_code error;
+  fs::path path = fs::u8path(*path_value);
+  if (!fs::exists(path, error)) {
+    result->Error(kPathNotFound, "The provided path does not exist.",
+                  EncodableValue(*path_value));
+    return;
+  }
+  if (error) {
+    result->Error(kWriteFailed, error.message(), EncodableValue(*path_value));
+    return;
+  }
+  if (fs::is_directory(path, error)) {
+    result->Error(kNotAFile, "The provided path is a directory, not a file.",
+                  EncodableValue(*path_value));
+    return;
+  }
+  if (error) {
+    result->Error(kWriteFailed, error.message(), EncodableValue(*path_value));
+    return;
+  }
+
+  const std::ios::openmode open_mode =
+      std::ios::binary |
+      (mode == "append" ? std::ios::app : std::ios::trunc);
+  std::ofstream file(path, open_mode);
+  if (!file.is_open()) {
+    result->Error(kWriteFailed, "Unable to open the file for writing.",
+                  EncodableValue(*path_value));
+    return;
+  }
+  if (!bytes->empty()) {
+    file.write(reinterpret_cast<const char*>(bytes->data()),
+               static_cast<std::streamsize>(bytes->size()));
+  }
+  file.close();
+  if (!file) {
+    result->Error(kWriteFailed, "Unable to write the file.",
+                  EncodableValue(*path_value));
+    return;
+  }
+
+  result->Success(SerializeFileEntry(path));
 }
 
 void FilegatePlugin::Save(

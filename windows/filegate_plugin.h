@@ -34,6 +34,10 @@ class FilegatePlugin : public flutter::Plugin {
       const flutter::EncodableValue* arguments,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
+  void Write(
+      const flutter::EncodableValue* arguments,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+
   void GetFileSize(
       const flutter::EncodableValue* arguments,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);

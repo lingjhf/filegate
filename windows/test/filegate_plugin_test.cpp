@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
@@ -46,6 +47,12 @@ MethodCallResult Invoke(FilegatePlugin* plugin,
                     const EncodableValue* details) { result.error_code = code; },
           nullptr));
   return result;
+}
+
+std::string ReadTextFile(const fs::path& path) {
+  std::ifstream file(path, std::ios::binary);
+  return std::string(std::istreambuf_iterator<char>(file),
+                     std::istreambuf_iterator<char>());
 }
 
 }  // namespace
@@ -153,6 +160,126 @@ TEST(FilegatePlugin, SaveBlankNameReturnsInvalidArgs) {
       Invoke(&plugin, "save", std::make_unique<EncodableValue>(arguments));
 
   EXPECT_EQ(result.error_code, "invalid_args");
+}
+
+TEST(FilegatePlugin, WriteMissingPathReturnsInvalidArgs) {
+  FilegatePlugin plugin;
+
+  MethodCallResult result =
+      Invoke(&plugin, "write", std::make_unique<EncodableValue>());
+
+  EXPECT_EQ(result.error_code, "invalid_args");
+}
+
+TEST(FilegatePlugin, WriteMissingBytesReturnsInvalidArgs) {
+  FilegatePlugin plugin;
+  EncodableMap arguments = {
+      {EncodableValue("path"), EncodableValue("C:\\temp\\filegate.txt")},
+  };
+
+  MethodCallResult result =
+      Invoke(&plugin, "write", std::make_unique<EncodableValue>(arguments));
+
+  EXPECT_EQ(result.error_code, "invalid_args");
+}
+
+TEST(FilegatePlugin, WriteUnknownModeReturnsInvalidArgs) {
+  FilegatePlugin plugin;
+  EncodableMap arguments = {
+      {EncodableValue("path"), EncodableValue("C:\\temp\\filegate.txt")},
+      {EncodableValue("bytes"), EncodableValue(std::vector<uint8_t>{1})},
+      {EncodableValue("mode"), EncodableValue("unknown")},
+  };
+
+  MethodCallResult result =
+      Invoke(&plugin, "write", std::make_unique<EncodableValue>(arguments));
+
+  EXPECT_EQ(result.error_code, "invalid_args");
+}
+
+TEST(FilegatePlugin, WriteMissingFileReturnsPathNotFound) {
+  FilegatePlugin plugin;
+  fs::path path = fs::temp_directory_path() / "filegate_missing_write.txt";
+  fs::remove(path);
+  EncodableMap arguments = {
+      {EncodableValue("path"), EncodableValue(path.u8string())},
+      {EncodableValue("bytes"), EncodableValue(std::vector<uint8_t>{1})},
+      {EncodableValue("mode"), EncodableValue("append")},
+  };
+
+  MethodCallResult result =
+      Invoke(&plugin, "write", std::make_unique<EncodableValue>(arguments));
+
+  EXPECT_EQ(result.error_code, "path_not_found");
+}
+
+TEST(FilegatePlugin, WriteDirectoryReturnsNotAFile) {
+  FilegatePlugin plugin;
+  EncodableMap arguments = {
+      {EncodableValue("path"),
+       EncodableValue(fs::temp_directory_path().u8string())},
+      {EncodableValue("bytes"), EncodableValue(std::vector<uint8_t>{1})},
+      {EncodableValue("mode"), EncodableValue("append")},
+  };
+
+  MethodCallResult result =
+      Invoke(&plugin, "write", std::make_unique<EncodableValue>(arguments));
+
+  EXPECT_EQ(result.error_code, "not_a_file");
+}
+
+TEST(FilegatePlugin, WriteAppendAddsBytes) {
+  FilegatePlugin plugin;
+  fs::path path = fs::temp_directory_path() / "filegate_test_write_append.txt";
+  {
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    file << "hello";
+  }
+  EncodableMap arguments = {
+      {EncodableValue("path"), EncodableValue(path.u8string())},
+      {EncodableValue("bytes"),
+       EncodableValue(std::vector<uint8_t>{' ', 'w', 'o', 'r', 'l', 'd'})},
+      {EncodableValue("mode"), EncodableValue("append")},
+  };
+
+  MethodCallResult result =
+      Invoke(&plugin, "write", std::make_unique<EncodableValue>(arguments));
+
+  ASSERT_TRUE(result.success.has_value());
+  EXPECT_EQ(ReadTextFile(path), "hello world");
+  const EncodableMap* entry = std::get_if<EncodableMap>(&*result.success);
+  ASSERT_NE(entry, nullptr);
+  EXPECT_EQ(std::get<std::string>(entry->at(EncodableValue("path"))),
+            path.u8string());
+  EXPECT_EQ(std::get<std::string>(entry->at(EncodableValue("kind"))), "file");
+  const EncodableMap* metadata =
+      std::get_if<EncodableMap>(&entry->at(EncodableValue("metadata")));
+  ASSERT_NE(metadata, nullptr);
+  EXPECT_EQ(std::get<int64_t>(metadata->at(EncodableValue("size"))), 11);
+
+  fs::remove(path);
+}
+
+TEST(FilegatePlugin, WriteReplaceTruncatesFile) {
+  FilegatePlugin plugin;
+  fs::path path = fs::temp_directory_path() / "filegate_test_write_replace.txt";
+  {
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    file << "hello";
+  }
+  EncodableMap arguments = {
+      {EncodableValue("path"), EncodableValue(path.u8string())},
+      {EncodableValue("bytes"), EncodableValue(std::vector<uint8_t>{'o', 'k'})},
+      {EncodableValue("mode"), EncodableValue("replace")},
+  };
+
+  MethodCallResult result =
+      Invoke(&plugin, "write", std::make_unique<EncodableValue>(arguments));
+
+  ASSERT_TRUE(result.success.has_value());
+  EXPECT_EQ(ReadTextFile(path), "ok");
+
+  fs::remove(path);
 }
 
 }  // namespace test

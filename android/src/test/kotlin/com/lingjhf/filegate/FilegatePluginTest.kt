@@ -4,6 +4,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.EventChannel
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.util.concurrent.CountDownLatch
@@ -47,6 +48,162 @@ internal class FilegatePluginTest {
             "no_activity",
             "File saver requires a foreground activity.",
             null
+        )
+    }
+
+    @Test
+    fun onMethodCall_writeWithMissingPath_returnsInvalidArgs() {
+        val plugin = FilegatePlugin()
+
+        val call = MethodCall("write", null)
+        val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+        plugin.onMethodCall(call, mockResult)
+
+        Mockito.verify(mockResult).error(
+            "invalid_args",
+            "A non-empty file path is required.",
+            null
+        )
+    }
+
+    @Test
+    fun onMethodCall_writeWithMissingBytes_returnsInvalidArgs() {
+        val plugin = FilegatePlugin()
+
+        val call = MethodCall("write", mapOf("path" to "/tmp/filegate-test.txt"))
+        val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+        plugin.onMethodCall(call, mockResult)
+
+        Mockito.verify(mockResult).error(
+            "invalid_args",
+            "A byte payload is required.",
+            null
+        )
+    }
+
+    @Test
+    fun onMethodCall_writeWithUnknownMode_returnsInvalidArgs() {
+        val plugin = FilegatePlugin()
+
+        val call = MethodCall(
+            "write",
+            mapOf(
+                "path" to "/tmp/filegate-test.txt",
+                "bytes" to byteArrayOf(1),
+                "mode" to "unknown"
+            )
+        )
+        val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+        plugin.onMethodCall(call, mockResult)
+
+        Mockito.verify(mockResult).error(
+            "invalid_args",
+            "Unknown write mode: unknown.",
+            null
+        )
+    }
+
+    @Test
+    fun onMethodCall_writeWithMissingFile_returnsPathNotFound() {
+        val plugin = FilegatePlugin()
+        val file = File.createTempFile("filegate-missing", ".txt")
+        file.delete()
+
+        val call = MethodCall(
+            "write",
+            mapOf(
+                "path" to file.absolutePath,
+                "bytes" to byteArrayOf(1),
+                "mode" to "append"
+            )
+        )
+        val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+        plugin.onMethodCall(call, mockResult)
+
+        Mockito.verify(mockResult).error(
+            "path_not_found",
+            "The provided path does not exist.",
+            file.absolutePath
+        )
+    }
+
+    @Test
+    fun onMethodCall_writeAppend_addsBytesAndReturnsEntry() {
+        val plugin = FilegatePlugin()
+        val file = File.createTempFile("filegate-write-append", ".txt")
+        try {
+            file.writeText("hello")
+            val call = MethodCall(
+                "write",
+                mapOf(
+                    "path" to file.absolutePath,
+                    "bytes" to " world".toByteArray(),
+                    "mode" to "append"
+                )
+            )
+            val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+
+            plugin.onMethodCall(call, mockResult)
+
+            assertEquals("hello world", file.readText())
+            val captor = org.mockito.ArgumentCaptor.forClass(Any::class.java)
+            Mockito.verify(mockResult).success(captor.capture())
+            @Suppress("UNCHECKED_CAST")
+            val entry = captor.value as Map<String, Any?>
+            assertEquals(file.path, entry["path"])
+            assertEquals("file", entry["kind"])
+            @Suppress("UNCHECKED_CAST")
+            val metadata = entry["metadata"] as Map<String, Any?>
+            assertEquals(11L, metadata["size"])
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun onMethodCall_writeReplace_truncatesFile() {
+        val plugin = FilegatePlugin()
+        val file = File.createTempFile("filegate-write-replace", ".txt")
+        try {
+            file.writeText("hello")
+            val call = MethodCall(
+                "write",
+                mapOf(
+                    "path" to file.absolutePath,
+                    "bytes" to "ok".toByteArray(),
+                    "mode" to "replace"
+                )
+            )
+            val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+
+            plugin.onMethodCall(call, mockResult)
+
+            assertEquals("ok", file.readText())
+            Mockito.verify(mockResult).success(Mockito.any())
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun onMethodCall_writeDirectory_returnsNotAFile() {
+        val plugin = FilegatePlugin()
+
+        val call = MethodCall(
+            "write",
+            mapOf(
+                "path" to System.getProperty("java.io.tmpdir"),
+                "bytes" to byteArrayOf(1),
+                "mode" to "append"
+            )
+        )
+        val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+        plugin.onMethodCall(call, mockResult)
+
+        Mockito.verify(mockResult).error(
+            "not_a_file",
+            "The provided path is a directory, not a file.",
+            System.getProperty("java.io.tmpdir")
         )
     }
 

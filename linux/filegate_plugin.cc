@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
 #include <string>
 #include <sys/stat.h>
 #include <vector>
@@ -393,6 +394,64 @@ FlMethodResponse* filegate_save_file(FlValue* arguments) {
   return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
 }
 
+FlMethodResponse* filegate_write_file(FlValue* arguments) {
+  const char* path = lookup_string(arguments, "path");
+  if (path == nullptr || strlen(path) == 0) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kInvalidArgs, "A non-empty file path is required.", nullptr));
+  }
+
+  FlValue* bytes_value = lookup_value(arguments, "bytes");
+  if (bytes_value == nullptr ||
+      fl_value_get_type(bytes_value) != FL_VALUE_TYPE_UINT8_LIST) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kInvalidArgs, "A byte payload is required.", nullptr));
+  }
+
+  const char* mode = lookup_string(arguments, "mode");
+  if (mode == nullptr) {
+    mode = "replace";
+  }
+  if (strcmp(mode, "replace") != 0 && strcmp(mode, "append") != 0) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kInvalidArgs, "Unknown write mode.", nullptr));
+  }
+
+  GStatBuf stat_buffer = {};
+  if (g_stat(path, &stat_buffer) != 0) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kPathNotFound, "The provided path does not exist.", nullptr));
+  }
+  if (S_ISDIR(stat_buffer.st_mode)) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kNotAFile, "The provided path is a directory, not a file.", nullptr));
+  }
+
+  const std::ios::openmode open_mode =
+      std::ios::binary |
+      (strcmp(mode, "append") == 0 ? std::ios::app : std::ios::trunc);
+  std::ofstream file(path, open_mode);
+  if (!file.is_open()) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kWriteFailed, "Unable to open the file for writing.", nullptr));
+  }
+
+  const uint8_t* bytes = fl_value_get_uint8_list(bytes_value);
+  const size_t length = fl_value_get_length(bytes_value);
+  if (length > 0) {
+    file.write(reinterpret_cast<const char*>(bytes),
+               static_cast<std::streamsize>(length));
+  }
+  file.close();
+  if (!file) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kWriteFailed, "Unable to write the file.", nullptr));
+  }
+
+  g_autoptr(FlValue) result = serialize_file_entry(path, nullptr);
+  return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+}
+
 // Called when a method call is received from Flutter.
 static void filegate_plugin_handle_method_call(
     FilegatePlugin* self,
@@ -405,6 +464,8 @@ static void filegate_plugin_handle_method_call(
     response = filegate_pick_files(arguments);
   } else if (strcmp(method, "save") == 0) {
     response = filegate_save_file(arguments);
+  } else if (strcmp(method, "write") == 0) {
+    response = filegate_write_file(arguments);
   } else if (strcmp(method, "getFileSize") == 0) {
     response = filegate_get_file_size(arguments);
   } else {

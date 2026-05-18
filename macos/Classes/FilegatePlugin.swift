@@ -25,6 +25,8 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
       pick(arguments: call.arguments as? [String: Any], result: result)
     case "save":
       save(arguments: call.arguments as? [String: Any], result: result)
+    case "write":
+      write(arguments: call.arguments as? [String: Any], result: result)
     case "getFileSize":
       getFileSize(arguments: call.arguments as? [String: Any], result: result)
     case "startRead":
@@ -163,6 +165,52 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
       } catch {
         result(FlutterError(code: "write_failed", message: error.localizedDescription, details: url.path))
       }
+    }
+  }
+
+  private func write(arguments: [String: Any]?, result: @escaping FlutterResult) {
+    guard let path = arguments?["path"] as? String, !path.isEmpty else {
+      result(FlutterError(code: "invalid_args", message: "A non-empty file path is required.", details: nil))
+      return
+    }
+    guard let typedData = arguments?["bytes"] as? FlutterStandardTypedData else {
+      result(FlutterError(code: "invalid_args", message: "A byte payload is required.", details: path))
+      return
+    }
+    let mode = arguments?["mode"] as? String ?? "replace"
+    guard mode == "replace" || mode == "append" else {
+      result(FlutterError(code: "invalid_args", message: "Unknown write mode.", details: mode))
+      return
+    }
+
+    let url = Self.resolveURL(from: path)
+    var isDirectory = ObjCBool(false)
+    guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+      result(FlutterError(code: "path_not_found", message: "The provided path does not exist.", details: path))
+      return
+    }
+    guard !isDirectory.boolValue else {
+      result(FlutterError(code: "not_a_file", message: "The provided path is a directory, not a file.", details: path))
+      return
+    }
+    guard FileManager.default.isWritableFile(atPath: url.path) else {
+      result(FlutterError(code: "permission_denied", message: "The provided path is not writable.", details: path))
+      return
+    }
+
+    do {
+      let handle = try FileHandle(forWritingTo: url)
+      defer { try? handle.close() }
+      if mode == "append" {
+        _ = try handle.seekToEnd()
+      } else {
+        try handle.truncate(atOffset: 0)
+        try handle.seek(toOffset: 0)
+      }
+      try handle.write(contentsOf: typedData.data)
+      result(Self.serializeEntry(url))
+    } catch {
+      result(FlutterError(code: "write_failed", message: error.localizedDescription, details: path))
     }
   }
 
@@ -378,6 +426,13 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
   private static func isValidFileName(_ value: String) -> Bool {
     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
     return !trimmed.isEmpty && !value.contains("/") && !value.contains("\\")
+  }
+
+  private static func resolveURL(from value: String) -> URL {
+    if let url = URL(string: value), url.scheme != nil {
+      return url
+    }
+    return URL(fileURLWithPath: value)
   }
 
   private static func metadataForFile(_ url: URL) -> [String: Any] {
