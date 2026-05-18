@@ -14,6 +14,7 @@ void main() {
     expect(find.text('Files'), findsOneWidget);
     expect(find.text('Directory'), findsOneWidget);
     expect(find.text('Read file'), findsOneWidget);
+    expect(find.text('Save file'), findsOneWidget);
 
     await tester.tap(
       find.byKey(const ValueKey<String>('capabilities-example-tile')),
@@ -25,6 +26,7 @@ void main() {
     );
     expect(find.text('File picking'), findsOneWidget);
     expect(find.text('Native URI read'), findsOneWidget);
+    expect(find.text('File saving'), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -54,6 +56,15 @@ void main() {
       find.byKey(const ValueKey<String>('read-file-button')),
       findsOneWidget,
     );
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('save-example-tile')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey<String>('save-file-button')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('file picker page displays selected files', (tester) async {
@@ -69,6 +80,22 @@ void main() {
     expect(find.text('config.json'), findsOneWidget);
     expect(find.text('/tmp/notes.txt | 6 bytes | text/plain'), findsOneWidget);
   });
+
+  testWidgets('save page displays saved file result', (tester) async {
+    await tester.pumpWidget(MyApp(filegate: _FakeFilegate()));
+
+    await tester.tap(find.byKey(const ValueKey<String>('save-example-tile')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('save-file-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Saved filegate-export.txt'), findsOneWidget);
+    expect(find.text('filegate-export.txt'), findsOneWidget);
+    expect(
+      find.text('/tmp/filegate-export.txt | 16 bytes | text/plain'),
+      findsOneWidget,
+    );
+  });
 }
 
 class _FakeFilegate extends Filegate {
@@ -81,6 +108,7 @@ class _FakeFilegate extends Filegate {
       supportsInitialDirectory: true,
       supportsPersistedAccess: true,
       supportsNativeUriRead: false,
+      supportsFileSaving: true,
     );
   }
 
@@ -137,5 +165,23 @@ class _FakeFilegate extends Filegate {
     int? maxBytes,
   }) async {
     return Uint8List.fromList(const <int>[1, 2, 3, 4]);
+  }
+
+  @override
+  Future<PickedEntry?> saveFile(
+    Uint8List bytes, {
+    required String suggestedName,
+    List<String> allowedExtensions = const [],
+    String? title,
+    String? initialDirectory,
+    String? mimeType,
+    bool persistAccess = true,
+  }) async {
+    return PickedEntry(
+      path: '/tmp/$suggestedName',
+      name: suggestedName,
+      kind: PickedEntryKind.file,
+      metadata: PickedEntryMetadata(size: bytes.length, mimeType: mimeType),
+    );
   }
 }

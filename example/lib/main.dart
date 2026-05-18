@@ -5,6 +5,7 @@ import 'src/capabilities_example_page.dart';
 import 'src/directory_picker_example_page.dart';
 import 'src/file_picker_example_page.dart';
 import 'src/read_file_example_page.dart';
+import 'src/save_file_example_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -81,6 +82,19 @@ class _ExampleListPage extends StatelessWidget {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => ReadFileExamplePage(filegate: filegate),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            key: const ValueKey<String>('save-example-tile'),
+            title: const Text('Save file'),
+            subtitle: const Text('Save bytes with a native dialog'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => SaveFileExamplePage(filegate: filegate),
                 ),
               );
             },

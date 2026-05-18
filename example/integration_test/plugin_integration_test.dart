@@ -18,6 +18,7 @@ void main() {
     expect(find.text('Files'), findsOneWidget);
     expect(find.text('Directory'), findsOneWidget);
     expect(find.text('Read file'), findsOneWidget);
+    expect(find.text('Save file'), findsOneWidget);
   });
 
   testWidgets('example pages can be opened from the list', (
@@ -60,6 +61,15 @@ void main() {
     await _pumpFrames(tester);
     expect(
       find.byKey(const ValueKey<String>('read-file-button')),
+      findsOneWidget,
+    );
+
+    await tester.pageBack();
+    await _pumpFrames(tester);
+    await tester.tap(find.byKey(const ValueKey<String>('save-example-tile')));
+    await _pumpFrames(tester);
+    expect(
+      find.byKey(const ValueKey<String>('save-file-button')),
       findsOneWidget,
     );
   });
@@ -109,6 +119,24 @@ void main() {
     expect(find.text('6 bytes'), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('read-preview')), findsOneWidget);
     expect(find.text('66 69 6c 65 21 0a'), findsOneWidget);
+  });
+
+  testWidgets('save page renders returned file entry', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(MyApp(filegate: _FakeFilegate()));
+
+    await tester.tap(find.byKey(const ValueKey<String>('save-example-tile')));
+    await _pumpFrames(tester);
+    await tester.tap(find.byKey(const ValueKey<String>('save-file-button')));
+    await _pumpFrames(tester);
+
+    expect(find.text('Saved filegate-export.txt'), findsOneWidget);
+    expect(find.text('filegate-export.txt'), findsOneWidget);
+    expect(
+      find.text('/tmp/filegate-export.txt | 16 bytes | text/plain'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('native file APIs read a sandbox file', (_) async {
@@ -237,6 +265,7 @@ class _FakeFilegate extends Filegate {
       supportsInitialDirectory: true,
       supportsPersistedAccess: true,
       supportsNativeUriRead: false,
+      supportsFileSaving: true,
     );
   }
 
@@ -300,5 +329,23 @@ class _FakeFilegate extends Filegate {
     int? maxBytes,
   }) async {
     return Uint8List.fromList(const <int>[0x66, 0x69, 0x6c, 0x65, 0x21, 0x0a]);
+  }
+
+  @override
+  Future<PickedEntry?> saveFile(
+    Uint8List bytes, {
+    required String suggestedName,
+    List<String> allowedExtensions = const [],
+    String? title,
+    String? initialDirectory,
+    String? mimeType,
+    bool persistAccess = true,
+  }) async {
+    return PickedEntry(
+      path: '/tmp/$suggestedName',
+      name: suggestedName,
+      kind: PickedEntryKind.file,
+      metadata: PickedEntryMetadata(size: bytes.length, mimeType: mimeType),
+    );
   }
 }

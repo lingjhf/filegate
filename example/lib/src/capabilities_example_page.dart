@@ -54,6 +54,10 @@ class CapabilitiesExamplePage extends StatelessWidget {
                 label: 'Native URI read',
                 value: capabilities.supportsNativeUriRead,
               ),
+              _CapabilityTile(
+                label: 'File saving',
+                value: capabilities.supportsFileSaving,
+              ),
             ],
           );
         },
