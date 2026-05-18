@@ -46,7 +46,13 @@ package-level feature.
 | Directory enumeration | ✓ |  |  |
 | Recursive directory enumeration | ✓ |  |  |
 | Mixed file and directory picking | ✓ |  | ✓ |
-| Save or save-as dialog | ✓ | ✓ | ✓ |
+| Save dialog / choose output path | ✓ | ✓ | ✓ |
+| One-call save byte payload with dialog | ✓ |  | ✓ |
+| Save result metadata | ✓ |  |  |
+| Direct write to existing path or URI | ✓ |  |  |
+| Replace existing file without picker | ✓ |  |  |
+| Append to existing file without picker | ✓ |  |  |
+| Empty-byte replace/append contract | ✓ |  |  |
 | Chunked file reading | ✓ | ✓ | ✓ |
 | Cancellable read session | ✓ |  |  |
 | Read progress helper | ✓ |  |  |
@@ -56,7 +62,10 @@ package-level feature.
 | Result modified time metadata | ✓ | ✓ |  |
 | Result MIME type metadata | ✓ | ✓ |  |
 | Android persisted URI access option | ✓ |  |  |
-| Direct append/replace writing | ✓ |  |  |
+
+`saveFile` is the save/save-as flow for creating or replacing a user-chosen
+target. Appending is intentionally modeled as direct writing to an existing
+target via `writeFile(..., mode: FilegateWriteMode.append)`.
 
 ## Installation
 
