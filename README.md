@@ -21,7 +21,7 @@ reading for paths available to Dart uses `dart:io`.
 
 ## Feature comparison
 
-Compared with this package (`filegate` 1.3.3) and the latest stable pub.dev
+Compared with this package (`filegate` 1.4.0) and the latest stable pub.dev
 versions checked on 2026-05-18:
 [`file_selector` 1.1.0](https://pub.dev/packages/file_selector) and
 [`file_picker` 11.0.2](https://pub.dev/packages/file_picker).
@@ -73,7 +73,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  filegate: ^1.0.0
+  filegate: ^1.4.0
 ```
 
 If you are using this repository directly:

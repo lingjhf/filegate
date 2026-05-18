@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.4.0 - 2026-05-18
+
 ### Added
 
 - Added a direct file save API contract for writing in-memory bytes through

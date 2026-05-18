@@ -1,6 +1,6 @@
 name: filegate
-description: "A Flutter plugin for native file picking and streamed file reading across Android, iOS, macOS, Windows, and Linux."
-version: 1.3.3
+description: "A Flutter plugin for native file picking, saving, writing, and streamed file reading across Android, iOS, macOS, Windows, and Linux."
+version: 1.4.0
 repository: https://github.com/lingjhf/filegate
 issue_tracker: https://github.com/lingjhf/filegate/issues
 
