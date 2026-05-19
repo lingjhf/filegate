@@ -14,16 +14,23 @@ class MockFilegatePlatform
   FilegatePickOptions? lastOptions;
   FilegateSaveOptions? lastSaveOptions;
   FilegateWriteOptions? lastWriteOptions;
+  String? lastOpenWritePath;
+  FilegateWriteMode? lastOpenWriteMode;
   int? fileSize = 123;
   List<Uint8List> chunks = <Uint8List>[
     Uint8List.fromList(const [1, 2, 3]),
   ];
+  final List<Uint8List> writeChunks = <Uint8List>[];
   int cancelCount = 0;
+  int writeCancelCount = 0;
+  int writeCloseCount = 0;
   int openReadCount = 0;
+  int openWriteCount = 0;
   int? lastChunkSize;
   int? lastStart;
   int? lastEnd;
   Object? getFileSizeError;
+  Object? openWriteError;
   Stream<Uint8List> Function()? openReadStream;
   FilegateCapabilities capabilities = const FilegateCapabilities(
     supportsFilePicking: true,
@@ -34,6 +41,7 @@ class MockFilegatePlatform
     supportsNativeUriRead: true,
     supportsFileSaving: true,
     supportsFileWriting: true,
+    supportsFileStreamWriting: true,
   );
 
   @override
@@ -76,6 +84,41 @@ class MockFilegatePlatform
         kind: PickedEntryKind.file,
         metadata: PickedEntryMetadata(size: options.bytes.length),
       ),
+    );
+  }
+
+  @override
+  Future<FileWriteSession> openWrite(
+    String path, {
+    FilegateWriteMode mode = FilegateWriteMode.replace,
+  }) async {
+    final error = openWriteError;
+    if (error != null) {
+      throw error;
+    }
+    openWriteCount += 1;
+    lastOpenWritePath = path;
+    lastOpenWriteMode = mode;
+    return FileWriteSession(
+      onAdd: (chunk) async {
+        writeChunks.add(chunk);
+      },
+      onClose: () async {
+        writeCloseCount += 1;
+        final size = writeChunks.fold<int>(
+          0,
+          (previous, chunk) => previous + chunk.length,
+        );
+        return PickedEntry(
+          path: path,
+          name: path.replaceAll(r'\', '/').split('/').last,
+          kind: PickedEntryKind.file,
+          metadata: PickedEntryMetadata(size: size),
+        );
+      },
+      onCancel: () async {
+        writeCancelCount += 1;
+      },
     );
   }
 
@@ -146,6 +189,10 @@ void main() {
       () => platform.write(
         FilegateWriteOptions(path: '/tmp/example.txt', bytes: Uint8List(0)),
       ),
+      throwsA(isA<UnimplementedError>()),
+    );
+    expect(
+      () => platform.openWrite('/tmp/example.txt'),
       throwsA(isA<UnimplementedError>()),
     );
     expect(
@@ -244,6 +291,98 @@ void main() {
     expect(fakePlatform.lastWriteOptions, isNull);
   });
 
+  test('openWrite delegates to the active platform', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    FilegatePlatform.instance = fakePlatform;
+
+    final session = await filegatePlugin.openWrite(
+      '/tmp/export.txt',
+      mode: FilegateWriteMode.append,
+    );
+    await session.add(Uint8List.fromList(const [1, 2]));
+    final result = await session.close();
+
+    expect(result.path, '/tmp/export.txt');
+    expect(result.size, 2);
+    expect(fakePlatform.lastOpenWritePath, '/tmp/export.txt');
+    expect(fakePlatform.lastOpenWriteMode, FilegateWriteMode.append);
+    expect(fakePlatform.writeCloseCount, 1);
+  });
+
+  test('writeStream writes chunks and returns close entry', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    FilegatePlatform.instance = fakePlatform;
+
+    final result = await filegatePlugin.writeStream(
+      '/tmp/export.txt',
+      Stream<List<int>>.fromIterable(const [
+        <int>[1, 2],
+        <int>[],
+        <int>[3],
+      ]),
+      mode: FilegateWriteMode.append,
+    );
+
+    expect(result.path, '/tmp/export.txt');
+    expect(result.size, 3);
+    expect(fakePlatform.writeChunks.map((chunk) => chunk.toList()), const [
+      <int>[1, 2],
+      <int>[3],
+    ]);
+    expect(fakePlatform.writeCloseCount, 1);
+    expect(fakePlatform.writeCancelCount, 0);
+    expect(fakePlatform.lastOpenWriteMode, FilegateWriteMode.append);
+  });
+
+  test('writeStream validates paths before touching platform', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    FilegatePlatform.instance = fakePlatform;
+
+    await expectLater(
+      () => filegatePlugin.writeStream('', const Stream<List<int>>.empty()),
+      throwsA(isA<ArgumentError>()),
+    );
+
+    expect(fakePlatform.openWriteCount, 0);
+  });
+
+  test(
+    'writeStream cancels the session when the source stream fails',
+    () async {
+      const filegatePlugin = Filegate();
+      final fakePlatform = MockFilegatePlatform();
+      FilegatePlatform.instance = fakePlatform;
+
+      Stream<List<int>> failingStream() async* {
+        yield const <int>[1];
+        throw PlatformException(
+          code: FilegateErrorCode.writeFailed,
+          message: 'write failed',
+        );
+      }
+
+      await expectLater(
+        () => filegatePlugin.writeStream('/tmp/export.txt', failingStream()),
+        throwsA(
+          isA<PlatformException>().having(
+            (error) => error.code,
+            'code',
+            FilegateErrorCode.writeFailed,
+          ),
+        ),
+      );
+
+      expect(fakePlatform.writeChunks.map((chunk) => chunk.toList()), const [
+        <int>[1],
+      ]);
+      expect(fakePlatform.writeCloseCount, 0);
+      expect(fakePlatform.writeCancelCount, 1);
+    },
+  );
+
   test('openRead delegates to the active platform', () async {
     const filegatePlugin = Filegate();
     final fakePlatform = MockFilegatePlatform();
@@ -282,6 +421,7 @@ void main() {
     expect(capabilities.supportsNativeUriRead, isTrue);
     expect(capabilities.supportsFileSaving, isTrue);
     expect(capabilities.supportsFileWriting, isTrue);
+    expect(capabilities.supportsFileStreamWriting, isTrue);
   });
 
   test('capabilities round-trip map payloads', () {
@@ -294,6 +434,7 @@ void main() {
       supportsNativeUriRead: false,
       supportsFileSaving: true,
       supportsFileWriting: true,
+      supportsFileStreamWriting: true,
     );
 
     final restored = FilegateCapabilities.fromMap(capabilities.toMap());
@@ -315,6 +456,10 @@ void main() {
     expect(restored.supportsNativeUriRead, capabilities.supportsNativeUriRead);
     expect(restored.supportsFileSaving, capabilities.supportsFileSaving);
     expect(restored.supportsFileWriting, capabilities.supportsFileWriting);
+    expect(
+      restored.supportsFileStreamWriting,
+      capabilities.supportsFileStreamWriting,
+    );
   });
 
   test(
@@ -331,6 +476,7 @@ void main() {
 
       expect(restored.supportsFileSaving, isFalse);
       expect(restored.supportsFileWriting, isFalse);
+      expect(restored.supportsFileStreamWriting, isFalse);
     },
   );
 
@@ -580,6 +726,8 @@ void main() {
     expect(FilegateErrorCode.writeFailed, 'write_failed');
     expect(FilegateErrorCode.streamActive, 'stream_active');
     expect(FilegateErrorCode.missingStreamId, 'missing_stream_id');
+    expect(FilegateErrorCode.missingWriteSessionId, 'missing_write_session_id');
+    expect(FilegateErrorCode.writeSessionNotFound, 'write_session_not_found');
     expect(FilegateErrorCode.invalidChunk, 'invalid_chunk');
     expect(FilegateErrorCode.readOpenFailed, 'read_open_failed');
     expect(FilegateErrorCode.readFailed, 'read_failed');
@@ -1144,5 +1292,50 @@ void main() {
     await session.cancel();
 
     expect(cancelCount, 1);
+  });
+
+  test('file write session close and cancel are idempotent', () async {
+    var closeCount = 0;
+    var cancelCount = 0;
+    final session = FileWriteSession(
+      onAdd: (_) async {},
+      onClose: () async {
+        closeCount += 1;
+        return const PickedEntry(
+          path: '/tmp/example.txt',
+          name: 'example.txt',
+          kind: PickedEntryKind.file,
+        );
+      },
+      onCancel: () async {
+        cancelCount += 1;
+      },
+    );
+
+    await session.close();
+    await session.close();
+    await session.cancel();
+
+    expect(closeCount, 1);
+    expect(cancelCount, 0);
+  });
+
+  test('file write session rejects add and close after cancel', () async {
+    final session = FileWriteSession(
+      onAdd: (_) async {},
+      onClose: () async {
+        return const PickedEntry(
+          path: '/tmp/example.txt',
+          name: 'example.txt',
+          kind: PickedEntryKind.file,
+        );
+      },
+      onCancel: () async {},
+    );
+
+    await session.cancel();
+
+    await expectLater(session.add(const [1]), throwsA(isA<StateError>()));
+    await expectLater(session.close(), throwsA(isA<StateError>()));
   });
 }

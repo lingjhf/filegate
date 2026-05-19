@@ -4,6 +4,7 @@
 #include <shobjidl.h>
 #include <wrl/client.h>
 
+#include <atomic>
 #include <chrono>
 #include <algorithm>
 #include <cctype>
@@ -36,6 +37,9 @@ constexpr char kPathNotFound[] = "path_not_found";
 constexpr char kUnsupportedMode[] = "unsupported_mode";
 constexpr char kEnumerationFailed[] = "enumeration_failed";
 constexpr char kWriteFailed[] = "write_failed";
+constexpr char kWriteSessionNotFound[] = "write_session_not_found";
+
+std::atomic<uint64_t> next_write_session_id{1};
 
 std::wstring Utf8ToWide(const std::string& value) {
   if (value.empty()) {
@@ -311,6 +315,10 @@ std::wstring BuildFilterPattern(const std::vector<std::string>& extensions) {
   return pattern;
 }
 
+std::string NewWriteSessionId() {
+  return "write-" + std::to_string(next_write_session_id.fetch_add(1));
+}
+
 }  // namespace
 
 // static
@@ -333,7 +341,7 @@ void FilegatePlugin::RegisterWithRegistrar(
 
 FilegatePlugin::FilegatePlugin() {}
 
-FilegatePlugin::~FilegatePlugin() {}
+FilegatePlugin::~FilegatePlugin() { write_sessions_.clear(); }
 
 void FilegatePlugin::HandleMethodCall(
     const flutter::MethodCall<flutter::EncodableValue> &method_call,
@@ -344,6 +352,14 @@ void FilegatePlugin::HandleMethodCall(
     Save(method_call.arguments(), std::move(result));
   } else if (method_call.method_name().compare("write") == 0) {
     Write(method_call.arguments(), std::move(result));
+  } else if (method_call.method_name().compare("startWrite") == 0) {
+    StartWrite(method_call.arguments(), std::move(result));
+  } else if (method_call.method_name().compare("writeChunk") == 0) {
+    WriteChunk(method_call.arguments(), std::move(result));
+  } else if (method_call.method_name().compare("finishWrite") == 0) {
+    FinishWrite(method_call.arguments(), std::move(result));
+  } else if (method_call.method_name().compare("cancelWrite") == 0) {
+    CancelWrite(method_call.arguments(), std::move(result));
   } else if (method_call.method_name().compare("getFileSize") == 0) {
     GetFileSize(method_call.arguments(), std::move(result));
   } else {
@@ -448,6 +464,140 @@ void FilegatePlugin::Write(
   }
 
   result->Success(SerializeFileEntry(path));
+}
+
+void FilegatePlugin::StartWrite(
+    const flutter::EncodableValue* arguments,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const EncodableMap* map = GetArgumentsMap(arguments);
+  const std::string* path_value = LookupString(map, "path");
+  if (path_value == nullptr || path_value->empty()) {
+    result->Error(kInvalidArgs, "A non-empty file path is required.");
+    return;
+  }
+
+  const std::string* mode_value = LookupString(map, "mode");
+  const std::string mode = mode_value == nullptr ? "replace" : *mode_value;
+  if (mode != "replace" && mode != "append") {
+    result->Error(kInvalidArgs, "Unknown write mode.", EncodableValue(mode));
+    return;
+  }
+
+  std::error_code error;
+  fs::path path = fs::u8path(*path_value);
+  if (!fs::exists(path, error)) {
+    result->Error(kPathNotFound, "The provided path does not exist.",
+                  EncodableValue(*path_value));
+    return;
+  }
+  if (error) {
+    result->Error(kWriteFailed, error.message(), EncodableValue(*path_value));
+    return;
+  }
+  if (fs::is_directory(path, error)) {
+    result->Error(kNotAFile, "The provided path is a directory, not a file.",
+                  EncodableValue(*path_value));
+    return;
+  }
+  if (error) {
+    result->Error(kWriteFailed, error.message(), EncodableValue(*path_value));
+    return;
+  }
+
+  auto session = std::make_unique<WriteSession>(*path_value);
+  const std::ios::openmode open_mode =
+      std::ios::binary |
+      (mode == "append" ? std::ios::app : std::ios::trunc);
+  session->file.open(path, open_mode);
+  if (!session->file.is_open()) {
+    result->Error(kWriteFailed, "Unable to open the file for writing.",
+                  EncodableValue(*path_value));
+    return;
+  }
+
+  const std::string session_id = NewWriteSessionId();
+  write_sessions_[session_id] = std::move(session);
+  result->Success(EncodableValue(session_id));
+}
+
+void FilegatePlugin::WriteChunk(
+    const flutter::EncodableValue* arguments,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const EncodableMap* map = GetArgumentsMap(arguments);
+  const std::string* session_id = LookupString(map, "sessionId");
+  if (session_id == nullptr || session_id->empty()) {
+    result->Error(kInvalidArgs, "A non-empty sessionId is required.");
+    return;
+  }
+
+  const std::vector<uint8_t>* bytes = LookupBytes(map, "bytes");
+  if (bytes == nullptr) {
+    result->Error(kInvalidArgs, "A byte payload is required.",
+                  EncodableValue(*session_id));
+    return;
+  }
+
+  auto iterator = write_sessions_.find(*session_id);
+  if (iterator == write_sessions_.end()) {
+    result->Error(kWriteSessionNotFound, "The write session was not found.",
+                  EncodableValue(*session_id));
+    return;
+  }
+
+  if (!bytes->empty()) {
+    iterator->second->file.write(reinterpret_cast<const char*>(bytes->data()),
+                                 static_cast<std::streamsize>(bytes->size()));
+  }
+  if (!iterator->second->file) {
+    result->Error(kWriteFailed, "Unable to write the file.",
+                  EncodableValue(iterator->second->path));
+    return;
+  }
+
+  result->Success();
+}
+
+void FilegatePlugin::FinishWrite(
+    const flutter::EncodableValue* arguments,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const EncodableMap* map = GetArgumentsMap(arguments);
+  const std::string* session_id = LookupString(map, "sessionId");
+  if (session_id == nullptr || session_id->empty()) {
+    result->Error(kInvalidArgs, "A non-empty sessionId is required.");
+    return;
+  }
+
+  auto iterator = write_sessions_.find(*session_id);
+  if (iterator == write_sessions_.end()) {
+    result->Error(kWriteSessionNotFound, "The write session was not found.",
+                  EncodableValue(*session_id));
+    return;
+  }
+
+  std::unique_ptr<WriteSession> session = std::move(iterator->second);
+  write_sessions_.erase(iterator);
+  session->file.close();
+  if (!session->file) {
+    result->Error(kWriteFailed, "Unable to write the file.",
+                  EncodableValue(session->path));
+    return;
+  }
+
+  result->Success(SerializeFileEntry(fs::u8path(session->path)));
+}
+
+void FilegatePlugin::CancelWrite(
+    const flutter::EncodableValue* arguments,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const EncodableMap* map = GetArgumentsMap(arguments);
+  const std::string* session_id = LookupString(map, "sessionId");
+  if (session_id == nullptr || session_id->empty()) {
+    result->Error(kInvalidArgs, "A non-empty sessionId is required.");
+    return;
+  }
+
+  write_sessions_.erase(*session_id);
+  result->Success();
 }
 
 void FilegatePlugin::Save(

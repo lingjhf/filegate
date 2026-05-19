@@ -1,6 +1,7 @@
 # filegate_example
 
-Demonstrates how to use the filegate plugin.
+Demonstrates file picking, directory enumeration, save dialogs, direct writes,
+streamed writes, and streamed reads with the filegate plugin.
 
 ## Getting Started
 

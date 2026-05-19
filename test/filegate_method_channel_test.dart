@@ -18,13 +18,17 @@ void main() {
   Object? pickResponse;
   Object? saveResponse;
   Object? writeResponse;
+  Object? finishWriteResponse;
   String startReadResponse = 'stream-1';
+  String startWriteResponse = 'write-1';
   Completer<String>? startReadCompleter;
   Object? eventPayload = Uint8List.fromList(const [1, 2, 3]);
   PlatformException? streamError;
   PlatformException? getFileSizeError;
   PlatformException? startReadError;
+  PlatformException? startWriteError;
   bool cancelReadThrows = false;
+  bool cancelWriteThrows = false;
 
   setUp(() {
     methodCalls.clear();
@@ -61,13 +65,26 @@ void main() {
         'mimeType': 'text/plain',
       },
     };
+    finishWriteResponse = {
+      'path': '/tmp/export.txt',
+      'name': 'export.txt',
+      'kind': 'file',
+      'metadata': {
+        'size': 6,
+        'modifiedAt': 1778893200000,
+        'mimeType': 'text/plain',
+      },
+    };
     startReadResponse = 'stream-1';
+    startWriteResponse = 'write-1';
     startReadCompleter = null;
     eventPayload = Uint8List.fromList(const [1, 2, 3]);
     streamError = null;
     getFileSizeError = null;
     startReadError = null;
+    startWriteError = null;
     cancelReadThrows = false;
+    cancelWriteThrows = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
           methodCalls.add(methodCall);
@@ -81,6 +98,28 @@ void main() {
 
           if (methodCall.method == 'write') {
             return writeResponse;
+          }
+
+          if (methodCall.method == 'startWrite') {
+            if (startWriteError != null) {
+              throw startWriteError!;
+            }
+            return startWriteResponse;
+          }
+
+          if (methodCall.method == 'writeChunk') {
+            return null;
+          }
+
+          if (methodCall.method == 'finishWrite') {
+            return finishWriteResponse;
+          }
+
+          if (methodCall.method == 'cancelWrite') {
+            if (cancelWriteThrows) {
+              throw PlatformException(code: 'cancel_failed');
+            }
+            return null;
           }
 
           if (methodCall.method == 'getFileSize') {
@@ -229,6 +268,7 @@ void main() {
     expect(capabilities.supportsNativeUriRead, isTrue);
     expect(capabilities.supportsFileSaving, isTrue);
     expect(capabilities.supportsFileWriting, isTrue);
+    expect(capabilities.supportsFileStreamWriting, isTrue);
   });
 
   test('capabilities describe Apple mixed picker support', () {
@@ -241,10 +281,12 @@ void main() {
     expect(iosCapabilities.supportsNativeUriRead, isTrue);
     expect(iosCapabilities.supportsFileSaving, isTrue);
     expect(iosCapabilities.supportsFileWriting, isTrue);
+    expect(iosCapabilities.supportsFileStreamWriting, isTrue);
     expect(macosCapabilities.supportsMixedPicking, isTrue);
     expect(macosCapabilities.supportsNativeUriRead, isFalse);
     expect(macosCapabilities.supportsFileSaving, isTrue);
     expect(macosCapabilities.supportsFileWriting, isTrue);
+    expect(macosCapabilities.supportsFileStreamWriting, isTrue);
   });
 
   test('capabilities describe desktop picker limits', () {
@@ -257,10 +299,12 @@ void main() {
     expect(windowsCapabilities.supportsPersistedAccess, isTrue);
     expect(windowsCapabilities.supportsFileSaving, isTrue);
     expect(windowsCapabilities.supportsFileWriting, isTrue);
+    expect(windowsCapabilities.supportsFileStreamWriting, isTrue);
     expect(linuxCapabilities.supportsMixedPicking, isFalse);
     expect(linuxCapabilities.supportsPersistedAccess, isTrue);
     expect(linuxCapabilities.supportsFileSaving, isTrue);
     expect(linuxCapabilities.supportsFileWriting, isTrue);
+    expect(linuxCapabilities.supportsFileStreamWriting, isTrue);
   });
 
   test('capabilities are disabled for unknown operating systems', () {
@@ -276,6 +320,7 @@ void main() {
     expect(capabilities.supportsNativeUriRead, isFalse);
     expect(capabilities.supportsFileSaving, isFalse);
     expect(capabilities.supportsFileWriting, isFalse);
+    expect(capabilities.supportsFileStreamWriting, isFalse);
   });
 
   test('pick rejects invalid native entry payloads', () async {
@@ -399,6 +444,143 @@ void main() {
       ),
       throwsA(isA<ArgumentError>()),
     );
+  });
+
+  test('openWrite streams chunks and decodes the finished entry', () async {
+    final session = await platform.openWrite(
+      '/tmp/export.txt',
+      mode: FilegateWriteMode.append,
+    );
+    await session.add(Uint8List.fromList(const [1, 2, 3]));
+    await session.add(const <int>[]);
+    final result = await session.close();
+
+    expect(result.path, '/tmp/export.txt');
+    expect(result.name, 'export.txt');
+    expect(result.size, 6);
+
+    final startArguments =
+        methodCalls.firstWhere((call) => call.method == 'startWrite').arguments
+            as Map<Object?, Object?>;
+    expect(startArguments, containsPair('path', '/tmp/export.txt'));
+    expect(startArguments, containsPair('mode', 'append'));
+
+    final chunkArguments =
+        methodCalls.firstWhere((call) => call.method == 'writeChunk').arguments
+            as Map<Object?, Object?>;
+    expect(chunkArguments, containsPair('sessionId', 'write-1'));
+    expect(chunkArguments['bytes'], Uint8List.fromList(const [1, 2, 3]));
+
+    expect(
+      methodCalls.firstWhere((call) => call.method == 'finishWrite').arguments,
+      containsPair('sessionId', 'write-1'),
+    );
+    expect(
+      methodCalls.where((call) => call.method == 'writeChunk'),
+      hasLength(1),
+    );
+  });
+
+  test('openWrite validates paths before touching the channel', () async {
+    await expectLater(platform.openWrite(''), throwsA(isA<ArgumentError>()));
+
+    expect(methodCalls.where((call) => call.method == 'startWrite'), isEmpty);
+  });
+
+  test(
+    'openWrite fails when native startWrite returns empty session id',
+    () async {
+      startWriteResponse = '';
+
+      await expectLater(
+        platform.openWrite('/tmp/export.txt'),
+        throwsA(
+          isA<PlatformException>().having(
+            (error) => error.code,
+            'code',
+            FilegateErrorCode.missingWriteSessionId,
+          ),
+        ),
+      );
+    },
+  );
+
+  test('openWrite surfaces native startWrite platform exceptions', () async {
+    startWriteError = PlatformException(
+      code: FilegateErrorCode.permissionDenied,
+      message: 'The provided path is not writable.',
+    );
+
+    await expectLater(
+      platform.openWrite('/tmp/export.txt'),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          FilegateErrorCode.permissionDenied,
+        ),
+      ),
+    );
+  });
+
+  test(
+    'openWrite cancels native writer and ignores cancellation failures',
+    () async {
+      cancelWriteThrows = true;
+      final session = await platform.openWrite('/tmp/export.txt');
+
+      await session.cancel();
+      await session.cancel();
+
+      expect(
+        methodCalls.where((call) => call.method == 'cancelWrite'),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'writeStream cancels native writer when the source stream fails',
+    () async {
+      Stream<List<int>> failingStream() async* {
+        yield const <int>[1];
+        throw PlatformException(
+          code: FilegateErrorCode.writeFailed,
+          message: 'write failed',
+        );
+      }
+
+      await expectLater(
+        const Filegate().writeStream('/tmp/export.txt', failingStream()),
+        throwsA(
+          isA<PlatformException>().having(
+            (error) => error.code,
+            'code',
+            FilegateErrorCode.writeFailed,
+          ),
+        ),
+      );
+
+      expect(
+        methodCalls.where((call) => call.method == 'writeChunk'),
+        hasLength(1),
+      );
+      expect(
+        methodCalls.where((call) => call.method == 'finishWrite'),
+        isEmpty,
+      );
+      expect(
+        methodCalls.where((call) => call.method == 'cancelWrite'),
+        hasLength(1),
+      );
+    },
+  );
+
+  test('openWrite rejects invalid native finish payloads', () async {
+    finishWriteResponse = null;
+    final session = await platform.openWrite('/tmp/export.txt');
+
+    await expectLater(session.close(), throwsA(isA<ArgumentError>()));
   });
 
   test('getFileSize validates arguments before touching the channel', () async {

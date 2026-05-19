@@ -4,7 +4,11 @@
 #include <flutter/method_channel.h>
 #include <flutter/plugin_registrar_windows.h>
 
+#include <fstream>
 #include <memory>
+#include <string>
+#include <unordered_map>
+#include <utility>
 
 namespace filegate {
 
@@ -38,9 +42,35 @@ class FilegatePlugin : public flutter::Plugin {
       const flutter::EncodableValue* arguments,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
+  void StartWrite(
+      const flutter::EncodableValue* arguments,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+
+  void WriteChunk(
+      const flutter::EncodableValue* arguments,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+
+  void FinishWrite(
+      const flutter::EncodableValue* arguments,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+
+  void CancelWrite(
+      const flutter::EncodableValue* arguments,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+
   void GetFileSize(
       const flutter::EncodableValue* arguments,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+
+  struct WriteSession {
+    explicit WriteSession(std::string path) : path(std::move(path)) {}
+
+    std::string path;
+    std::ofstream file;
+  };
+
+  std::unordered_map<std::string, std::unique_ptr<WriteSession>>
+      write_sessions_;
 };
 
 }  // namespace filegate

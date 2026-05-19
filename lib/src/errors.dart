@@ -16,6 +16,8 @@ abstract final class FilegateErrorCode {
   static const writeFailed = 'write_failed';
   static const streamActive = 'stream_active';
   static const missingStreamId = 'missing_stream_id';
+  static const missingWriteSessionId = 'missing_write_session_id';
+  static const writeSessionNotFound = 'write_session_not_found';
   static const invalidChunk = 'invalid_chunk';
   static const readOpenFailed = 'read_open_failed';
   static const readFailed = 'read_failed';

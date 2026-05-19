@@ -7,6 +7,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   private let methodChannel: FlutterMethodChannel
   private var readChannels: [String: FlutterEventChannel] = [:]
   private var readHandlers: [String: FileReadStreamHandler] = [:]
+  private var writeSessions: [String: FileWriteSession] = [:]
   private var pendingPickResult: FlutterResult?
   private var pendingSaveResult: FlutterResult?
   private var pendingSaveTemporaryDirectoryURL: URL?
@@ -25,6 +26,10 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     super.init()
   }
 
+  deinit {
+    writeSessions.values.forEach { $0.cancel() }
+  }
+
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "pick":
@@ -33,6 +38,14 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       save(arguments: call.arguments as? [String: Any], result: result)
     case "write":
       write(arguments: call.arguments as? [String: Any], result: result)
+    case "startWrite":
+      startWrite(arguments: call.arguments as? [String: Any], result: result)
+    case "writeChunk":
+      writeChunk(arguments: call.arguments as? [String: Any], result: result)
+    case "finishWrite":
+      finishWrite(arguments: call.arguments as? [String: Any], result: result)
+    case "cancelWrite":
+      cancelWrite(arguments: call.arguments as? [String: Any], result: result)
     case "getFileSize":
       getFileSize(arguments: call.arguments as? [String: Any], result: result)
     case "startRead":
@@ -316,6 +329,107 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     readChannels[streamId] = eventChannel
     readHandlers[streamId] = handler
     result(streamId)
+  }
+
+  private func startWrite(arguments: [String: Any]?, result: @escaping FlutterResult) {
+    guard let path = arguments?["path"] as? String, !path.isEmpty else {
+      result(FlutterError(code: "invalid_args", message: "A non-empty file path is required.", details: nil))
+      return
+    }
+    let mode = arguments?["mode"] as? String ?? "replace"
+    guard mode == "replace" || mode == "append" else {
+      result(FlutterError(code: "invalid_args", message: "Unknown write mode: \(mode).", details: nil))
+      return
+    }
+
+    let fileURL = resolveURL(from: path)
+    let temporaryAccess = fileURL.startAccessingSecurityScopedResource()
+    if !temporaryAccess && !FileManager.default.fileExists(atPath: fileURL.path) {
+      result(FlutterError(code: "path_not_found", message: "The provided path does not exist.", details: path))
+      return
+    }
+    if !temporaryAccess && !FileManager.default.isWritableFile(atPath: fileURL.path) {
+      result(FlutterError(code: "security_scope_failed", message: "Unable to access the selected file in the current session.", details: path))
+      return
+    }
+
+    do {
+      let resourceValues = try fileURL.resourceValues(forKeys: [.isDirectoryKey])
+      if resourceValues.isDirectory == true {
+        if temporaryAccess {
+          fileURL.stopAccessingSecurityScopedResource()
+        }
+        result(FlutterError(code: "not_a_file", message: "The provided path is a directory, not a file.", details: path))
+        return
+      }
+
+      let handle = try FileHandle(forWritingTo: fileURL)
+      if mode == "append" {
+        handle.seekToEndOfFile()
+      } else {
+        handle.truncateFile(atOffset: 0)
+        handle.seek(toFileOffset: 0)
+      }
+      let sessionId = UUID().uuidString
+      writeSessions[sessionId] = FileWriteSession(
+        path: path,
+        url: fileURL,
+        handle: handle,
+        securityScoped: temporaryAccess
+      )
+      result(sessionId)
+    } catch {
+      if temporaryAccess {
+        fileURL.stopAccessingSecurityScopedResource()
+      }
+      result(FlutterError(code: "write_failed", message: error.localizedDescription, details: path))
+    }
+  }
+
+  private func writeChunk(arguments: [String: Any]?, result: @escaping FlutterResult) {
+    guard let sessionId = arguments?["sessionId"] as? String, !sessionId.isEmpty else {
+      result(FlutterError(code: "invalid_args", message: "A non-empty sessionId is required.", details: nil))
+      return
+    }
+    guard let typedData = arguments?["bytes"] as? FlutterStandardTypedData else {
+      result(FlutterError(code: "invalid_args", message: "A byte payload is required.", details: sessionId))
+      return
+    }
+    guard let session = writeSessions[sessionId] else {
+      result(FlutterError(code: "write_session_not_found", message: "The write session was not found.", details: sessionId))
+      return
+    }
+
+    session.handle.write(typedData.data)
+    result(nil)
+  }
+
+  private func finishWrite(arguments: [String: Any]?, result: @escaping FlutterResult) {
+    guard let sessionId = arguments?["sessionId"] as? String, !sessionId.isEmpty else {
+      result(FlutterError(code: "invalid_args", message: "A non-empty sessionId is required.", details: nil))
+      return
+    }
+    guard let session = writeSessions.removeValue(forKey: sessionId) else {
+      result(FlutterError(code: "write_session_not_found", message: "The write session was not found.", details: sessionId))
+      return
+    }
+
+    do {
+      try session.finish()
+      result(serializeFileEntry(session.url))
+    } catch {
+      result(FlutterError(code: "write_failed", message: error.localizedDescription, details: session.path))
+    }
+  }
+
+  private func cancelWrite(arguments: [String: Any]?, result: @escaping FlutterResult) {
+    guard let sessionId = arguments?["sessionId"] as? String, !sessionId.isEmpty else {
+      result(FlutterError(code: "invalid_args", message: "A non-empty sessionId is required.", details: nil))
+      return
+    }
+
+    writeSessions.removeValue(forKey: sessionId)?.cancel()
+    result(nil)
   }
 
   private func cancelRead(arguments: [String: Any]?, result: @escaping FlutterResult) {
@@ -815,4 +929,43 @@ private struct FilegateError: Error {
   let code: String
   let message: String
   let details: Any?
+}
+
+private final class FileWriteSession {
+  let path: String
+  let url: URL
+  let handle: FileHandle
+  private let securityScoped: Bool
+  private var isClosed = false
+
+  init(path: String, url: URL, handle: FileHandle, securityScoped: Bool) {
+    self.path = path
+    self.url = url
+    self.handle = handle
+    self.securityScoped = securityScoped
+  }
+
+  func finish() throws {
+    guard !isClosed else {
+      return
+    }
+    isClosed = true
+    defer {
+      if securityScoped {
+        url.stopAccessingSecurityScopedResource()
+      }
+    }
+    try handle.close()
+  }
+
+  func cancel() {
+    guard !isClosed else {
+      return
+    }
+    isClosed = true
+    try? handle.close()
+    if securityScoped {
+      url.stopAccessingSecurityScopedResource()
+    }
+  }
 }

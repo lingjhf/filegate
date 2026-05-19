@@ -81,6 +81,40 @@ class _WriteFileExamplePageState extends State<WriteFileExamplePage> {
     }
   }
 
+  Future<void> _writeStream() async {
+    final target = _target;
+    if (target == null) {
+      return;
+    }
+
+    setState(() {
+      _status = 'Streaming chunks to ${target.name}...';
+    });
+
+    try {
+      final updated = await widget.filegate.writeStream(
+        target.path,
+        Stream<List<int>>.fromIterable(
+          const <String>[
+            '\n',
+            'streamed by filegate\n',
+          ].map((text) => Uint8List.fromList(text.codeUnits)),
+        ),
+        mode: FilegateWriteMode.append,
+      );
+      if (!mounted) return;
+      setState(() {
+        _target = updated;
+        _status = 'Streamed chunks to ${updated.name}';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _status = 'Stream write failed: $error';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final target = _target;
@@ -112,6 +146,13 @@ class _WriteFileExamplePageState extends State<WriteFileExamplePage> {
                 : () => _write(FilegateWriteMode.replace),
             icon: const Icon(Icons.edit_document),
             label: const Text('Replace file contents'),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.tonalIcon(
+            key: const ValueKey<String>('stream-write-button'),
+            onPressed: target == null ? null : _writeStream,
+            icon: const Icon(Icons.playlist_add_check),
+            label: const Text('Stream append chunks'),
           ),
           const SizedBox(height: 16),
           Text(_status, key: const ValueKey<String>('write-status')),

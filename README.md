@@ -1,12 +1,12 @@
 # filegate
 
 A Flutter plugin for native file picking, direct file saving, direct file
-writing, and streamed file reading.
+writing, streamed file writing, and streamed file reading.
 
 The plugin exposes a Dart API for picking files or directory contents, saving
 bytes through native save/export dialogs, writing bytes to existing files,
-querying file size, and reading files in chunks without loading the whole file
-into memory first.
+writing streams to existing files, querying file size, and reading files in
+chunks without loading the whole file into memory first.
 
 ## Supported platforms
 
@@ -53,6 +53,8 @@ package-level feature.
 | Replace existing file without picker | ✓ |  |  |
 | Append to existing file without picker | ✓ |  |  |
 | Empty-byte replace/append contract | ✓ |  |  |
+| Streamed direct write | ✓ |  |  |
+| Cancellable write session | ✓ |  |  |
 | Chunked file reading | ✓ | ✓ | ✓ |
 | Cancellable read session | ✓ |  |  |
 | Read progress helper | ✓ |  |  |
@@ -65,7 +67,8 @@ package-level feature.
 
 `saveFile` is the save/save-as flow for creating or replacing a user-chosen
 target. Appending is intentionally modeled as direct writing to an existing
-target via `writeFile(..., mode: FilegateWriteMode.append)`.
+target via `writeFile`, `writeStream`, or `openWrite` with
+`FilegateWriteMode.append`.
 
 ## Installation
 
@@ -209,6 +212,20 @@ final updated = await filegate.writeFile(
 print(updated.size);
 ```
 
+### Stream bytes to an existing file
+
+```dart
+final updated = await filegate.writeStream(
+  '/path/to/file.bin',
+  Stream<List<int>>.fromIterable([
+    Uint8List.fromList([1, 2, 3]),
+    Uint8List.fromList([4, 5, 6]),
+  ]),
+);
+
+print(updated.size);
+```
+
 ### Read with progress
 
 ```dart
@@ -267,6 +284,9 @@ Methods:
 - `saveFile(...)`: Saves an in-memory byte payload through a native save/export
   dialog.
 - `writeFile(...)`: Replaces or appends bytes to an existing file path or URI.
+- `writeStream(...)`: Replaces or appends streamed byte chunks to an existing
+  file path or URI.
+- `openWrite(...)`: Opens a cancellable write session for manual chunk writes.
 - `getFileSize(String path)`: Returns a file size when known.
 - `openRead(String path, {int chunkSize, int start, int? end})`: Opens a
   cancellable byte stream. `start` is inclusive and `end` is exclusive.
@@ -337,6 +357,7 @@ Fields:
 - `supportsNativeUriRead`
 - `supportsFileSaving`
 - `supportsFileWriting`
+- `supportsFileStreamWriting`
 
 ## Errors
 
@@ -346,5 +367,5 @@ available in `FilegateErrorCode`, including `invalid_args`,
 `path_not_found`, `not_a_file`, `not_a_directory`, `permission_denied`,
 `persist_permission_failed`, `security_scope_failed`, `pick_failed`,
 `picker_failed`, `save_failed`, `write_failed`, `stream_active`,
-`missing_stream_id`, `invalid_chunk`, `read_open_failed`, `read_failed`, and
-`enumeration_failed`.
+`missing_stream_id`, `missing_write_session_id`, `write_session_not_found`,
+`invalid_chunk`, `read_open_failed`, `read_failed`, and `enumeration_failed`.

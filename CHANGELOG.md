@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- Added Dart APIs and method-channel contract for streamed file writing with
+  cancellable write sessions.
+- Implemented streamed append/replace writes in the native plugins and covered
+  them in the example app and integration tests.
+
 ## 1.4.0 - 2026-05-18
 
 ### Added

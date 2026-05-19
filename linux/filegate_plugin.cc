@@ -8,8 +8,11 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <sys/stat.h>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "filegate_plugin_private.h"
@@ -32,6 +35,16 @@ constexpr char kPathNotFound[] = "path_not_found";
 constexpr char kUnsupportedMode[] = "unsupported_mode";
 constexpr char kEnumerationFailed[] = "enumeration_failed";
 constexpr char kWriteFailed[] = "write_failed";
+constexpr char kWriteSessionNotFound[] = "write_session_not_found";
+
+struct WriteSession {
+  explicit WriteSession(std::string path) : path(std::move(path)) {}
+
+  std::string path;
+  std::ofstream file;
+};
+
+std::unordered_map<std::string, std::unique_ptr<WriteSession>> write_sessions;
 
 const char* lookup_string(FlValue* map, const char* key) {
   if (map == nullptr || fl_value_get_type(map) != FL_VALUE_TYPE_MAP) {
@@ -452,6 +465,119 @@ FlMethodResponse* filegate_write_file(FlValue* arguments) {
   return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
 }
 
+FlMethodResponse* filegate_start_write(FlValue* arguments) {
+  const char* path = lookup_string(arguments, "path");
+  if (path == nullptr || strlen(path) == 0) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kInvalidArgs, "A non-empty file path is required.", nullptr));
+  }
+
+  const char* mode = lookup_string(arguments, "mode");
+  if (mode == nullptr) {
+    mode = "replace";
+  }
+  if (strcmp(mode, "replace") != 0 && strcmp(mode, "append") != 0) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kInvalidArgs, "Unknown write mode.", nullptr));
+  }
+
+  GStatBuf stat_buffer = {};
+  if (g_stat(path, &stat_buffer) != 0) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kPathNotFound, "The provided path does not exist.", nullptr));
+  }
+  if (S_ISDIR(stat_buffer.st_mode)) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kNotAFile, "The provided path is a directory, not a file.", nullptr));
+  }
+
+  auto session = std::make_unique<WriteSession>(path);
+  const std::ios::openmode open_mode =
+      std::ios::binary |
+      (strcmp(mode, "append") == 0 ? std::ios::app : std::ios::trunc);
+  session->file.open(path, open_mode);
+  if (!session->file.is_open()) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kWriteFailed, "Unable to open the file for writing.", nullptr));
+  }
+
+  g_autofree gchar* session_id = g_uuid_string_random();
+  write_sessions[session_id] = std::move(session);
+  g_autoptr(FlValue) result = fl_value_new_string(session_id);
+  return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+}
+
+FlMethodResponse* filegate_write_chunk(FlValue* arguments) {
+  const char* session_id = lookup_string(arguments, "sessionId");
+  if (session_id == nullptr || strlen(session_id) == 0) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kInvalidArgs, "A non-empty sessionId is required.", nullptr));
+  }
+
+  FlValue* bytes_value = lookup_value(arguments, "bytes");
+  if (bytes_value == nullptr ||
+      fl_value_get_type(bytes_value) != FL_VALUE_TYPE_UINT8_LIST) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kInvalidArgs, "A byte payload is required.", nullptr));
+  }
+
+  auto iterator = write_sessions.find(session_id);
+  if (iterator == write_sessions.end()) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kWriteSessionNotFound, "The write session was not found.", nullptr));
+  }
+
+  const uint8_t* bytes = fl_value_get_uint8_list(bytes_value);
+  const size_t length = fl_value_get_length(bytes_value);
+  if (length > 0) {
+    iterator->second->file.write(reinterpret_cast<const char*>(bytes),
+                                 static_cast<std::streamsize>(length));
+  }
+  if (!iterator->second->file) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kWriteFailed, "Unable to write the file.", nullptr));
+  }
+
+  return FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+}
+
+FlMethodResponse* filegate_finish_write(FlValue* arguments) {
+  const char* session_id = lookup_string(arguments, "sessionId");
+  if (session_id == nullptr || strlen(session_id) == 0) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kInvalidArgs, "A non-empty sessionId is required.", nullptr));
+  }
+
+  auto iterator = write_sessions.find(session_id);
+  if (iterator == write_sessions.end()) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kWriteSessionNotFound, "The write session was not found.", nullptr));
+  }
+
+  std::unique_ptr<WriteSession> session = std::move(iterator->second);
+  write_sessions.erase(iterator);
+  session->file.close();
+  if (!session->file) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kWriteFailed, "Unable to write the file.", nullptr));
+  }
+
+  g_autoptr(FlValue) result =
+      serialize_file_entry(session->path.c_str(), nullptr);
+  return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+}
+
+FlMethodResponse* filegate_cancel_write(FlValue* arguments) {
+  const char* session_id = lookup_string(arguments, "sessionId");
+  if (session_id == nullptr || strlen(session_id) == 0) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+        kInvalidArgs, "A non-empty sessionId is required.", nullptr));
+  }
+
+  write_sessions.erase(session_id);
+  return FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+}
+
 // Called when a method call is received from Flutter.
 static void filegate_plugin_handle_method_call(
     FilegatePlugin* self,
@@ -466,6 +592,14 @@ static void filegate_plugin_handle_method_call(
     response = filegate_save_file(arguments);
   } else if (strcmp(method, "write") == 0) {
     response = filegate_write_file(arguments);
+  } else if (strcmp(method, "startWrite") == 0) {
+    response = filegate_start_write(arguments);
+  } else if (strcmp(method, "writeChunk") == 0) {
+    response = filegate_write_chunk(arguments);
+  } else if (strcmp(method, "finishWrite") == 0) {
+    response = filegate_finish_write(arguments);
+  } else if (strcmp(method, "cancelWrite") == 0) {
+    response = filegate_cancel_write(arguments);
   } else if (strcmp(method, "getFileSize") == 0) {
     response = filegate_get_file_size(arguments);
   } else {
@@ -476,6 +610,7 @@ static void filegate_plugin_handle_method_call(
 }
 
 static void filegate_plugin_dispose(GObject* object) {
+  write_sessions.clear();
   G_OBJECT_CLASS(filegate_plugin_parent_class)->dispose(object);
 }
 

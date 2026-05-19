@@ -4,6 +4,7 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'filegate_method_channel.dart';
 import 'src/file_read_session.dart';
+import 'src/file_write_session.dart';
 import 'src/models.dart';
 
 abstract class FilegatePlatform extends PlatformInterface {
@@ -41,6 +42,13 @@ abstract class FilegatePlatform extends PlatformInterface {
 
   Future<PickedEntry> write(FilegateWriteOptions options) {
     throw UnimplementedError('write() has not been implemented.');
+  }
+
+  Future<FileWriteSession> openWrite(
+    String path, {
+    FilegateWriteMode mode = FilegateWriteMode.replace,
+  }) {
+    throw UnimplementedError('openWrite() has not been implemented.');
   }
 
   Future<int?> getFileSize(String path) {

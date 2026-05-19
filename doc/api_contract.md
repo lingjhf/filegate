@@ -65,16 +65,25 @@ semantics below unless a future changelog calls out a breaking change.
 
 - `writeFile(path, bytes, mode: mode)` writes to an existing file path or URI
   without opening a picker.
+- `writeStream(path, chunks, mode: mode)` writes a stream of byte chunks to an
+  existing file path or URI without buffering the full payload in Dart.
+- `openWrite(path, mode: mode)` opens a write session for advanced producers
+  that need to add chunks manually, then `close()` or `cancel()` the session.
 - `FilegateWriteMode.replace` truncates the target before writing.
 - `FilegateWriteMode.append` writes at the end of the existing target.
 - Empty byte payloads are valid. Replace mode truncates to an empty file, and
   append mode leaves the file contents unchanged.
+- Empty streams are valid. Replace mode truncates to an empty file when the
+  write session opens, and append mode leaves the file contents unchanged.
+- Write session `cancel()` is idempotent. It releases native write resources but
+  does not guarantee rollback of chunks that were already written.
+- A closed write session rejects additional chunks. A cancelled write session
+  rejects additional chunks and cannot be closed.
 - If the target does not exist, is a directory, or cannot be accessed, native
   implementations surface the corresponding `FilegateErrorCode`.
 - Write results should include best-effort metadata for the updated file when
   the platform can provide it.
-- Streaming writes and append-through-save-dialog behavior are intentionally
-  outside this contract.
+- Append-through-save-dialog behavior is intentionally outside this contract.
 
 ## Directory listing
 
@@ -107,6 +116,8 @@ Native failures are surfaced as `PlatformException`s with
 - `write_failed`
 - `stream_active`
 - `missing_stream_id`
+- `missing_write_session_id`
+- `write_session_not_found`
 - `invalid_chunk`
 - `read_open_failed`
 - `read_failed`

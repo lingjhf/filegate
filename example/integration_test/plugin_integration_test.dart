@@ -211,6 +211,7 @@ void main() {
     expect(capabilities.supportsFilePicking, isTrue);
     expect(capabilities.supportsDirectoryPicking, isTrue);
     expect(capabilities.supportsFileWriting, isTrue);
+    expect(capabilities.supportsFileStreamWriting, isTrue);
     expect(transientPickOptions.toMap(), containsPair('persistAccess', false));
     expect(pickedFile.locationKind, FilegateLocationKind.platformPath);
     expect(pickedFile.fileSystemPath, file.path);
@@ -299,6 +300,34 @@ void main() {
     expect(replaced.size, replaceBytes.length);
     expect((await file.readAsBytes()).toList(), replaceBytes.toList());
 
+    final streamAppendBytes = Uint8List.fromList('stream\n'.codeUnits);
+    final streamAppended = await filegate.writeStream(
+      file.path,
+      Stream<List<int>>.fromIterable([
+        streamAppendBytes.sublist(0, 3),
+        streamAppendBytes.sublist(3),
+      ]),
+      mode: FilegateWriteMode.append,
+    );
+    expect(streamAppended.name, 'sample.txt');
+    expect(streamAppended.fileSystemPath, file.path);
+    expect(streamAppended.size, replaceBytes.length + streamAppendBytes.length);
+    expect(
+      (await file.readAsBytes()).toList(),
+      replaceBytes.followedBy(streamAppendBytes).toList(),
+    );
+
+    final openSessionBytes = Uint8List.fromList('open-session\n'.codeUnits);
+    final writeSession = await filegate.openWrite(file.path);
+    expect(await file.readAsBytes(), isEmpty);
+    await writeSession.add(openSessionBytes.sublist(0, 4));
+    await writeSession.add(openSessionBytes.sublist(4));
+    final streamed = await writeSession.close();
+    expect(streamed.name, 'sample.txt');
+    expect(streamed.fileSystemPath, file.path);
+    expect(streamed.size, openSessionBytes.length);
+    expect((await file.readAsBytes()).toList(), openSessionBytes.toList());
+
     await expectLater(
       filegate.writeFile(
         '${directory.path}${Platform.pathSeparator}missing.txt',
@@ -332,6 +361,7 @@ class _FakeFilegate extends Filegate {
       supportsNativeUriRead: false,
       supportsFileSaving: true,
       supportsFileWriting: true,
+      supportsFileStreamWriting: true,
     );
   }
 
@@ -427,6 +457,27 @@ class _FakeFilegate extends Filegate {
       kind: PickedEntryKind.file,
       metadata: PickedEntryMetadata(
         size: mode == FilegateWriteMode.append ? 28 : bytes.length,
+        mimeType: 'text/plain',
+      ),
+    );
+  }
+
+  @override
+  Future<PickedEntry> writeStream(
+    String path,
+    Stream<List<int>> chunks, {
+    FilegateWriteMode mode = FilegateWriteMode.replace,
+  }) async {
+    var size = 0;
+    await for (final chunk in chunks) {
+      size += chunk.length;
+    }
+    return PickedEntry(
+      path: path,
+      name: path.split('/').last,
+      kind: PickedEntryKind.file,
+      metadata: PickedEntryMetadata(
+        size: mode == FilegateWriteMode.append ? 30 + size : size,
         mimeType: 'text/plain',
       ),
     );

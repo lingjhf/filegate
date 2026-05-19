@@ -208,6 +208,131 @@ internal class FilegatePluginTest {
     }
 
     @Test
+    fun onMethodCall_startWriteWithMissingPath_returnsInvalidArgs() {
+        val plugin = FilegatePlugin()
+
+        val call = MethodCall("startWrite", null)
+        val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+        plugin.onMethodCall(call, mockResult)
+
+        Mockito.verify(mockResult).error(
+            "invalid_args",
+            "A non-empty file path is required.",
+            null
+        )
+    }
+
+    @Test
+    fun onMethodCall_writeChunkWithMissingSession_returnsNotFound() {
+        val plugin = FilegatePlugin()
+
+        val call = MethodCall(
+            "writeChunk",
+            mapOf(
+                "sessionId" to "missing",
+                "bytes" to byteArrayOf(1)
+            )
+        )
+        val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+        plugin.onMethodCall(call, mockResult)
+
+        Mockito.verify(mockResult).error(
+            "write_session_not_found",
+            "The write session was not found.",
+            "missing"
+        )
+    }
+
+    @Test
+    fun onMethodCall_streamWriteAppend_addsChunksAndReturnsEntry() {
+        val plugin = FilegatePlugin()
+        val file = File.createTempFile("filegate-write-stream-append", ".txt")
+        try {
+            file.writeText("hello")
+            val sessionId = startWrite(plugin, file, "append")
+
+            plugin.onMethodCall(
+                MethodCall(
+                    "writeChunk",
+                    mapOf(
+                        "sessionId" to sessionId,
+                        "bytes" to " ".toByteArray()
+                    )
+                ),
+                Mockito.mock(MethodChannel.Result::class.java)
+            )
+            plugin.onMethodCall(
+                MethodCall(
+                    "writeChunk",
+                    mapOf(
+                        "sessionId" to sessionId,
+                        "bytes" to "world".toByteArray()
+                    )
+                ),
+                Mockito.mock(MethodChannel.Result::class.java)
+            )
+
+            val finishResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+            plugin.onMethodCall(
+                MethodCall("finishWrite", mapOf("sessionId" to sessionId)),
+                finishResult
+            )
+
+            assertEquals("hello world", file.readText())
+            val captor = org.mockito.ArgumentCaptor.forClass(Any::class.java)
+            Mockito.verify(finishResult).success(captor.capture())
+            @Suppress("UNCHECKED_CAST")
+            val entry = captor.value as Map<String, Any?>
+            @Suppress("UNCHECKED_CAST")
+            val metadata = entry["metadata"] as Map<String, Any?>
+            assertEquals(11L, metadata["size"])
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun onMethodCall_streamWriteReplace_truncatesOnStart() {
+        val plugin = FilegatePlugin()
+        val file = File.createTempFile("filegate-write-stream-replace", ".txt")
+        try {
+            file.writeText("hello")
+            val sessionId = startWrite(plugin, file, "replace")
+
+            assertEquals("", file.readText())
+
+            val finishResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+            plugin.onMethodCall(
+                MethodCall("finishWrite", mapOf("sessionId" to sessionId)),
+                finishResult
+            )
+            Mockito.verify(finishResult).success(Mockito.any())
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun onMethodCall_cancelWrite_isIdempotent() {
+        val plugin = FilegatePlugin()
+        val file = File.createTempFile("filegate-write-stream-cancel", ".txt")
+        try {
+            val sessionId = startWrite(plugin, file, "append")
+            val call = MethodCall("cancelWrite", mapOf("sessionId" to sessionId))
+            val firstResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+            val secondResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+
+            plugin.onMethodCall(call, firstResult)
+            plugin.onMethodCall(call, secondResult)
+
+            Mockito.verify(firstResult).success(null)
+            Mockito.verify(secondResult).success(null)
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
     fun fileReadStreamHandler_keepsChannelUntilFlutterCancelsAfterEnd() {
         var disposeCount = 0
         val handler = FilegatePlugin.FileReadStreamHandler(
@@ -320,6 +445,21 @@ internal class FilegatePluginTest {
 
         assertTrue(sink.awaitEnd())
         assertEquals(listOf(listOf(1, 2, 3), listOf(4)), sink.successEvents)
+    }
+
+    private fun startWrite(plugin: FilegatePlugin, file: File, mode: String): String {
+        val call = MethodCall(
+            "startWrite",
+            mapOf(
+                "path" to file.absolutePath,
+                "mode" to mode
+            )
+        )
+        val result: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+        plugin.onMethodCall(call, result)
+        val captor = org.mockito.ArgumentCaptor.forClass(Any::class.java)
+        Mockito.verify(result).success(captor.capture())
+        return captor.value as String
     }
 
     private class RecordingEventSink : EventChannel.EventSink {

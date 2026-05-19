@@ -59,6 +59,7 @@ class FilegateCapabilities {
     required this.supportsNativeUriRead,
     this.supportsFileSaving = false,
     this.supportsFileWriting = false,
+    this.supportsFileStreamWriting = false,
   });
 
   final bool supportsFilePicking;
@@ -69,6 +70,7 @@ class FilegateCapabilities {
   final bool supportsNativeUriRead;
   final bool supportsFileSaving;
   final bool supportsFileWriting;
+  final bool supportsFileStreamWriting;
 
   Map<String, Object?> toMap() {
     return {
@@ -80,6 +82,7 @@ class FilegateCapabilities {
       'supportsNativeUriRead': supportsNativeUriRead,
       'supportsFileSaving': supportsFileSaving,
       'supportsFileWriting': supportsFileWriting,
+      'supportsFileStreamWriting': supportsFileStreamWriting,
     };
   }
 
@@ -92,6 +95,7 @@ class FilegateCapabilities {
     final supportsNativeUriRead = map['supportsNativeUriRead'];
     final supportsFileSaving = map['supportsFileSaving'];
     final supportsFileWriting = map['supportsFileWriting'];
+    final supportsFileStreamWriting = map['supportsFileStreamWriting'];
 
     if (supportsFilePicking is! bool ||
         supportsDirectoryPicking is! bool ||
@@ -100,7 +104,9 @@ class FilegateCapabilities {
         supportsPersistedAccess is! bool ||
         supportsNativeUriRead is! bool ||
         (supportsFileSaving != null && supportsFileSaving is! bool) ||
-        (supportsFileWriting != null && supportsFileWriting is! bool)) {
+        (supportsFileWriting != null && supportsFileWriting is! bool) ||
+        (supportsFileStreamWriting != null &&
+            supportsFileStreamWriting is! bool)) {
       throw ArgumentError.value(map, 'map', 'Invalid capabilities payload');
     }
 
@@ -113,6 +119,7 @@ class FilegateCapabilities {
       supportsNativeUriRead: supportsNativeUriRead,
       supportsFileSaving: supportsFileSaving as bool? ?? false,
       supportsFileWriting: supportsFileWriting as bool? ?? false,
+      supportsFileStreamWriting: supportsFileStreamWriting as bool? ?? false,
     );
   }
 }

@@ -13,5 +13,9 @@ FlMethodResponse *filegate_get_file_size(FlValue *arguments);
 FlMethodResponse *filegate_pick_files(FlValue *arguments);
 FlMethodResponse *filegate_save_file(FlValue *arguments);
 FlMethodResponse *filegate_write_file(FlValue *arguments);
+FlMethodResponse *filegate_start_write(FlValue *arguments);
+FlMethodResponse *filegate_write_chunk(FlValue *arguments);
+FlMethodResponse *filegate_finish_write(FlValue *arguments);
+FlMethodResponse *filegate_cancel_write(FlValue *arguments);
 
 #endif  // FLUTTER_PLUGIN_FILEGATE_PLUGIN_PRIVATE_H_

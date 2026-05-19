@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'filegate_platform_interface.dart';
 import 'src/errors.dart';
 import 'src/file_read_session.dart';
+import 'src/file_write_session.dart';
 import 'src/models.dart';
 
 /// An implementation of [FilegatePlatform] that uses method channels.
@@ -39,6 +40,7 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsNativeUriRead: true,
         supportsFileSaving: true,
         supportsFileWriting: true,
+        supportsFileStreamWriting: true,
       ),
       'ios' => const FilegateCapabilities(
         supportsFilePicking: true,
@@ -49,6 +51,7 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsNativeUriRead: true,
         supportsFileSaving: true,
         supportsFileWriting: true,
+        supportsFileStreamWriting: true,
       ),
       'macos' => const FilegateCapabilities(
         supportsFilePicking: true,
@@ -59,6 +62,7 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsNativeUriRead: false,
         supportsFileSaving: true,
         supportsFileWriting: true,
+        supportsFileStreamWriting: true,
       ),
       'windows' => const FilegateCapabilities(
         supportsFilePicking: true,
@@ -69,6 +73,7 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsNativeUriRead: false,
         supportsFileSaving: true,
         supportsFileWriting: true,
+        supportsFileStreamWriting: true,
       ),
       'linux' => const FilegateCapabilities(
         supportsFilePicking: true,
@@ -79,6 +84,7 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsNativeUriRead: false,
         supportsFileSaving: true,
         supportsFileWriting: true,
+        supportsFileStreamWriting: true,
       ),
       _ => const FilegateCapabilities(
         supportsFilePicking: false,
@@ -154,6 +160,45 @@ class MethodChannelFilegate extends FilegatePlatform {
     );
 
     return PickedEntry.fromMap(_castMap(entry));
+  }
+
+  @override
+  Future<FileWriteSession> openWrite(
+    String path, {
+    FilegateWriteMode mode = FilegateWriteMode.replace,
+  }) async {
+    if (path.isEmpty) {
+      throw ArgumentError.value(path, 'path', 'path must not be empty');
+    }
+
+    final sessionId = await methodChannel.invokeMethod<String>('startWrite', {
+      'path': path,
+      'mode': mode.name,
+    });
+
+    if (sessionId == null || sessionId.isEmpty) {
+      throw PlatformException(
+        code: FilegateErrorCode.missingWriteSessionId,
+        message: 'Native writer did not return a session identifier.',
+      );
+    }
+
+    return FileWriteSession(
+      onAdd: (chunk) {
+        return methodChannel.invokeMethod<void>('writeChunk', {
+          'sessionId': sessionId,
+          'bytes': chunk,
+        });
+      },
+      onClose: () async {
+        final entry = await methodChannel.invokeMapMethod<Object?, Object?>(
+          'finishWrite',
+          {'sessionId': sessionId},
+        );
+        return PickedEntry.fromMap(_castMap(entry));
+      },
+      onCancel: () => _cancelWrite(sessionId),
+    );
   }
 
   @override
@@ -435,6 +480,17 @@ class MethodChannelFilegate extends FilegatePlatform {
     } on PlatformException {
       // Ignore cancellation failures because the consumer already requested
       // shutdown and the native stream may have ended naturally.
+    }
+  }
+
+  Future<void> _cancelWrite(String sessionId) async {
+    try {
+      await methodChannel.invokeMethod<void>('cancelWrite', {
+        'sessionId': sessionId,
+      });
+    } on PlatformException {
+      // Ignore cancellation failures because the consumer already requested
+      // shutdown and the native write session may have ended naturally.
     }
   }
 

@@ -62,6 +62,10 @@ class CapabilitiesExamplePage extends StatelessWidget {
                 label: 'File writing',
                 value: capabilities.supportsFileWriting,
               ),
+              _CapabilityTile(
+                label: 'Stream writing',
+                value: capabilities.supportsFileStreamWriting,
+              ),
             ],
           );
         },

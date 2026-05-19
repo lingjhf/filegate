@@ -5,11 +5,13 @@ import 'package:flutter/services.dart';
 
 export 'src/errors.dart';
 export 'src/file_read_session.dart';
+export 'src/file_write_session.dart';
 export 'src/models.dart';
 
 import 'filegate_platform_interface.dart';
 import 'src/errors.dart';
 import 'src/file_read_session.dart';
+import 'src/file_write_session.dart';
 import 'src/models.dart';
 
 class Filegate {
@@ -39,6 +41,29 @@ class Filegate {
     FilegateWriteMode mode = FilegateWriteMode.replace,
   }) {
     return write(FilegateWriteOptions(path: path, bytes: bytes, mode: mode));
+  }
+
+  Future<FileWriteSession> openWrite(
+    String path, {
+    FilegateWriteMode mode = FilegateWriteMode.replace,
+  }) {
+    _validateWritePath(path);
+    return FilegatePlatform.instance.openWrite(path, mode: mode);
+  }
+
+  Future<PickedEntry> writeStream(
+    String path,
+    Stream<List<int>> chunks, {
+    FilegateWriteMode mode = FilegateWriteMode.replace,
+  }) async {
+    final session = await openWrite(path, mode: mode);
+    try {
+      await session.addStream(chunks);
+      return await session.close();
+    } catch (_) {
+      await session.cancel();
+      rethrow;
+    }
   }
 
   Future<PickedEntry?> saveFile(
@@ -394,8 +419,12 @@ void _validateSaveOptions(FilegateSaveOptions options) {
 }
 
 void _validateWriteOptions(FilegateWriteOptions options) {
-  if (options.path.isEmpty) {
-    throw ArgumentError.value(options.path, 'path', 'path must not be empty');
+  _validateWritePath(options.path);
+}
+
+void _validateWritePath(String path) {
+  if (path.isEmpty) {
+    throw ArgumentError.value(path, 'path', 'path must not be empty');
   }
 }
 

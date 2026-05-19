@@ -282,5 +282,143 @@ TEST(FilegatePlugin, WriteReplaceTruncatesFile) {
   fs::remove(path);
 }
 
+TEST(FilegatePlugin, StartWriteMissingPathReturnsInvalidArgs) {
+  FilegatePlugin plugin;
+
+  MethodCallResult result =
+      Invoke(&plugin, "startWrite", std::make_unique<EncodableValue>());
+
+  EXPECT_EQ(result.error_code, "invalid_args");
+}
+
+TEST(FilegatePlugin, WriteChunkMissingSessionReturnsNotFound) {
+  FilegatePlugin plugin;
+  EncodableMap arguments = {
+      {EncodableValue("sessionId"), EncodableValue("missing")},
+      {EncodableValue("bytes"), EncodableValue(std::vector<uint8_t>{1})},
+  };
+
+  MethodCallResult result = Invoke(
+      &plugin, "writeChunk", std::make_unique<EncodableValue>(arguments));
+
+  EXPECT_EQ(result.error_code, "write_session_not_found");
+}
+
+TEST(FilegatePlugin, StreamWriteAppendAddsChunks) {
+  FilegatePlugin plugin;
+  fs::path path = fs::temp_directory_path() / "filegate_test_stream_append.txt";
+  {
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    file << "hello";
+  }
+
+  EncodableMap start_arguments = {
+      {EncodableValue("path"), EncodableValue(path.u8string())},
+      {EncodableValue("mode"), EncodableValue("append")},
+  };
+  MethodCallResult start = Invoke(
+      &plugin, "startWrite", std::make_unique<EncodableValue>(start_arguments));
+  ASSERT_TRUE(start.success.has_value());
+  const std::string session_id = std::get<std::string>(*start.success);
+
+  EncodableMap first_arguments = {
+      {EncodableValue("sessionId"), EncodableValue(session_id)},
+      {EncodableValue("bytes"), EncodableValue(std::vector<uint8_t>{' '})},
+  };
+  MethodCallResult first = Invoke(
+      &plugin, "writeChunk", std::make_unique<EncodableValue>(first_arguments));
+  ASSERT_TRUE(first.success.has_value());
+
+  EncodableMap second_arguments = {
+      {EncodableValue("sessionId"), EncodableValue(session_id)},
+      {EncodableValue("bytes"),
+       EncodableValue(std::vector<uint8_t>{'w', 'o', 'r', 'l', 'd'})},
+  };
+  MethodCallResult second =
+      Invoke(&plugin, "writeChunk",
+             std::make_unique<EncodableValue>(second_arguments));
+  ASSERT_TRUE(second.success.has_value());
+
+  EncodableMap finish_arguments = {
+      {EncodableValue("sessionId"), EncodableValue(session_id)},
+  };
+  MethodCallResult finish =
+      Invoke(&plugin, "finishWrite",
+             std::make_unique<EncodableValue>(finish_arguments));
+
+  ASSERT_TRUE(finish.success.has_value());
+  EXPECT_EQ(ReadTextFile(path), "hello world");
+  const EncodableMap* entry = std::get_if<EncodableMap>(&*finish.success);
+  ASSERT_NE(entry, nullptr);
+  const EncodableMap* metadata =
+      std::get_if<EncodableMap>(&entry->at(EncodableValue("metadata")));
+  ASSERT_NE(metadata, nullptr);
+  EXPECT_EQ(std::get<int64_t>(metadata->at(EncodableValue("size"))), 11);
+
+  fs::remove(path);
+}
+
+TEST(FilegatePlugin, StreamWriteReplaceTruncatesOnStart) {
+  FilegatePlugin plugin;
+  fs::path path =
+      fs::temp_directory_path() / "filegate_test_stream_replace.txt";
+  {
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    file << "hello";
+  }
+
+  EncodableMap start_arguments = {
+      {EncodableValue("path"), EncodableValue(path.u8string())},
+      {EncodableValue("mode"), EncodableValue("replace")},
+  };
+  MethodCallResult start = Invoke(
+      &plugin, "startWrite", std::make_unique<EncodableValue>(start_arguments));
+
+  ASSERT_TRUE(start.success.has_value());
+  EXPECT_EQ(ReadTextFile(path), "");
+  const std::string session_id = std::get<std::string>(*start.success);
+
+  EncodableMap finish_arguments = {
+      {EncodableValue("sessionId"), EncodableValue(session_id)},
+  };
+  MethodCallResult finish =
+      Invoke(&plugin, "finishWrite",
+             std::make_unique<EncodableValue>(finish_arguments));
+  ASSERT_TRUE(finish.success.has_value());
+
+  fs::remove(path);
+}
+
+TEST(FilegatePlugin, CancelWriteIsIdempotent) {
+  FilegatePlugin plugin;
+  fs::path path = fs::temp_directory_path() / "filegate_test_stream_cancel.txt";
+  {
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    file << "hello";
+  }
+
+  EncodableMap start_arguments = {
+      {EncodableValue("path"), EncodableValue(path.u8string())},
+  };
+  MethodCallResult start = Invoke(
+      &plugin, "startWrite", std::make_unique<EncodableValue>(start_arguments));
+  ASSERT_TRUE(start.success.has_value());
+  const std::string session_id = std::get<std::string>(*start.success);
+
+  EncodableMap cancel_arguments = {
+      {EncodableValue("sessionId"), EncodableValue(session_id)},
+  };
+  MethodCallResult first =
+      Invoke(&plugin, "cancelWrite",
+             std::make_unique<EncodableValue>(cancel_arguments));
+  ASSERT_TRUE(first.success.has_value());
+  MethodCallResult second =
+      Invoke(&plugin, "cancelWrite",
+             std::make_unique<EncodableValue>(cancel_arguments));
+  ASSERT_TRUE(second.success.has_value());
+
+  fs::remove(path);
+}
+
 }  // namespace test
 }  // namespace filegate

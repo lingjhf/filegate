@@ -23,6 +23,7 @@ import java.io.FileNotFoundException
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.io.OutputStream
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -40,6 +41,7 @@ class FilegatePlugin :
     private var activityBinding: ActivityPluginBinding? = null
     private val readChannels = mutableMapOf<String, EventChannel>()
     private val readHandlers = mutableMapOf<String, FileReadStreamHandler>()
+    private val writeSessions = mutableMapOf<String, FileWriteSession>()
     private var pendingPick: PendingPick? = null
     private var pendingSave: PendingSave? = null
 
@@ -58,6 +60,10 @@ class FilegatePlugin :
             "pick" -> pick(call.arguments as? Map<*, *>, result)
             "save" -> save(call.arguments as? Map<*, *>, result)
             "write" -> write(call.arguments as? Map<*, *>, result)
+            "startWrite" -> startWrite(call.arguments as? Map<*, *>, result)
+            "writeChunk" -> writeChunk(call.arguments as? Map<*, *>, result)
+            "finishWrite" -> finishWrite(call.arguments as? Map<*, *>, result)
+            "cancelWrite" -> cancelWrite(call.arguments as? Map<*, *>, result)
             "getFileSize" -> getFileSize(call.arguments as? Map<*, *>, result)
             "startRead" -> startRead(call.arguments as? Map<*, *>, result)
             "cancelRead" -> cancelRead(call.arguments as? Map<*, *>, result)
@@ -69,6 +75,8 @@ class FilegatePlugin :
         pendingPick = null
         pendingSave = null
         readHandlers.values.toList().forEach { it.cancel() }
+        writeSessions.values.toList().forEach { it.cancel() }
+        writeSessions.clear()
         readHandlers.clear()
         readChannels.values.toList().forEach { it.setStreamHandler(null) }
         readChannels.clear()
@@ -385,6 +393,104 @@ class FilegatePlugin :
         } catch (error: Exception) {
             result.error("read_failed", error.localizedMessage, path)
         }
+    }
+
+    private fun startWrite(arguments: Map<*, *>?, result: Result) {
+        val path = arguments?.get("path") as? String
+        if (path.isNullOrEmpty()) {
+            result.error("invalid_args", "A non-empty file path is required.", null)
+            return
+        }
+
+        val mode = arguments["mode"] as? String ?: "replace"
+        if (mode != "replace" && mode != "append") {
+            result.error("invalid_args", "Unknown write mode: $mode.", null)
+            return
+        }
+
+        try {
+            val session = if (path.startsWith("content://")) {
+                openContentWriteSession(Uri.parse(path), mode, path)
+            } else {
+                val file = localFileForIdentifier(path)
+                openLocalWriteSession(file, mode, path)
+            }
+            val sessionId = UUID.randomUUID().toString()
+            writeSessions[sessionId] = session
+            result.success(sessionId)
+        } catch (error: FilegateError) {
+            result.error(error.code, error.message, error.details)
+        } catch (error: FileNotFoundException) {
+            result.error("path_not_found", error.localizedMessage, path)
+        } catch (error: SecurityException) {
+            result.error("permission_denied", error.localizedMessage, path)
+        } catch (error: Exception) {
+            result.error("write_failed", error.localizedMessage, path)
+        }
+    }
+
+    private fun writeChunk(arguments: Map<*, *>?, result: Result) {
+        val sessionId = arguments?.get("sessionId") as? String
+        if (sessionId.isNullOrEmpty()) {
+            result.error("invalid_args", "A non-empty sessionId is required.", null)
+            return
+        }
+
+        val bytes = arguments["bytes"] as? ByteArray
+        if (bytes == null) {
+            result.error("invalid_args", "A byte payload is required.", sessionId)
+            return
+        }
+
+        val session = writeSessions[sessionId]
+        if (session == null) {
+            result.error("write_session_not_found", "The write session was not found.", sessionId)
+            return
+        }
+
+        try {
+            if (bytes.isNotEmpty()) {
+                session.write(bytes)
+            }
+            result.success(null)
+        } catch (error: SecurityException) {
+            result.error("permission_denied", error.localizedMessage, session.originalPath)
+        } catch (error: Exception) {
+            result.error("write_failed", error.localizedMessage, session.originalPath)
+        }
+    }
+
+    private fun finishWrite(arguments: Map<*, *>?, result: Result) {
+        val sessionId = arguments?.get("sessionId") as? String
+        if (sessionId.isNullOrEmpty()) {
+            result.error("invalid_args", "A non-empty sessionId is required.", null)
+            return
+        }
+
+        val session = writeSessions.remove(sessionId)
+        if (session == null) {
+            result.error("write_session_not_found", "The write session was not found.", sessionId)
+            return
+        }
+
+        try {
+            result.success(session.finish())
+        } catch (error: SecurityException) {
+            result.error("permission_denied", error.localizedMessage, session.originalPath)
+        } catch (error: Exception) {
+            result.error("write_failed", error.localizedMessage, session.originalPath)
+        }
+    }
+
+    private fun cancelWrite(arguments: Map<*, *>?, result: Result) {
+        val sessionId = arguments?.get("sessionId") as? String
+        if (sessionId.isNullOrEmpty()) {
+            result.error("invalid_args", "A non-empty sessionId is required.", null)
+            return
+        }
+
+        writeSessions.remove(sessionId)?.cancel()
+        result.success(null)
     }
 
     private fun getFileSize(arguments: Map<*, *>?, result: Result) {
@@ -892,6 +998,59 @@ class FilegatePlugin :
         return serializeLocalFileEntry(file)
     }
 
+    private fun openContentWriteSession(
+        uri: Uri,
+        mode: String,
+        originalPath: String
+    ): FileWriteSession {
+        val document = DocumentFile.fromSingleUri(applicationContext, uri)
+        if (document != null) {
+            if (!document.exists()) {
+                throw FilegateError("path_not_found", "The provided path does not exist.", originalPath)
+            }
+            if (document.isDirectory) {
+                throw FilegateError("not_a_file", "The provided path is a directory, not a file.", originalPath)
+            }
+        }
+
+        val resolverMode = if (mode == "append") "wa" else "wt"
+        val outputStream = applicationContext.contentResolver.openOutputStream(uri, resolverMode)
+            ?: throw FilegateError("write_failed", "Unable to open the provided content URI for writing.", originalPath)
+
+        return FileWriteSession(
+            originalPath = originalPath,
+            outputStream = outputStream,
+            onFinish = {
+                val updatedDocument = DocumentFile.fromSingleUri(applicationContext, uri)
+                val name = updatedDocument?.name ?: queryDisplayName(uri) ?: uri.lastPathSegment ?: uri.toString()
+                serializeFileEntry(
+                    uri,
+                    name,
+                    metadata = metadataForDocument(updatedDocument, uri)
+                )
+            }
+        )
+    }
+
+    private fun openLocalWriteSession(
+        file: File,
+        mode: String,
+        originalPath: String
+    ): FileWriteSession {
+        if (!file.exists()) {
+            throw FilegateError("path_not_found", "The provided path does not exist.", originalPath)
+        }
+        if (file.isDirectory) {
+            throw FilegateError("not_a_file", "The provided path is a directory, not a file.", originalPath)
+        }
+
+        return FileWriteSession(
+            originalPath = originalPath,
+            outputStream = FileOutputStream(file, mode == "append"),
+            onFinish = { serializeLocalFileEntry(file) }
+        )
+    }
+
     private fun localFileForIdentifier(identifier: String): File {
         if (identifier.startsWith("file://")) {
             val uri = Uri.parse(identifier)
@@ -923,6 +1082,29 @@ class FilegatePlugin :
         override val message: String,
         val details: Any? = null
     ) : Exception(message)
+
+    private class FileWriteSession(
+        val originalPath: String,
+        private val outputStream: OutputStream,
+        private val onFinish: () -> Map<String, Any?>
+    ) {
+        fun write(bytes: ByteArray) {
+            outputStream.write(bytes)
+        }
+
+        fun finish(): Map<String, Any?> {
+            try {
+                outputStream.flush()
+            } finally {
+                outputStream.close()
+            }
+            return onFinish.invoke()
+        }
+
+        fun cancel() {
+            runCatching { outputStream.close() }
+        }
+    }
 
     internal class FileReadStreamHandler(
         private val openStream: () -> InputStream,

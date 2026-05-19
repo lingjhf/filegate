@@ -29,6 +29,7 @@ void main() {
     expect(find.text('Native URI read'), findsOneWidget);
     expect(find.text('File saving'), findsOneWidget);
     expect(find.text('File writing'), findsOneWidget);
+    expect(find.text('Stream writing'), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -74,6 +75,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey<String>('pick-write-target-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('stream-write-button')),
       findsOneWidget,
     );
   });
@@ -124,6 +129,23 @@ void main() {
     expect(find.text('notes.txt'), findsOneWidget);
     expect(find.textContaining('/tmp/notes.txt'), findsOneWidget);
   });
+
+  testWidgets('write page streams chunks to selected file', (tester) async {
+    await tester.pumpWidget(MyApp(filegate: _FakeFilegate()));
+
+    await tester.tap(find.byKey(const ValueKey<String>('write-example-tile')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('pick-write-target-button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('stream-write-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Streamed chunks to notes.txt'), findsOneWidget);
+    expect(find.text('notes.txt'), findsOneWidget);
+    expect(find.textContaining('/tmp/notes.txt'), findsOneWidget);
+  });
 }
 
 class _FakeFilegate extends Filegate {
@@ -138,6 +160,7 @@ class _FakeFilegate extends Filegate {
       supportsNativeUriRead: false,
       supportsFileSaving: true,
       supportsFileWriting: true,
+      supportsFileStreamWriting: true,
     );
   }
 
@@ -226,6 +249,27 @@ class _FakeFilegate extends Filegate {
       kind: PickedEntryKind.file,
       metadata: PickedEntryMetadata(
         size: mode == FilegateWriteMode.append ? 28 : bytes.length,
+        mimeType: 'text/plain',
+      ),
+    );
+  }
+
+  @override
+  Future<PickedEntry> writeStream(
+    String path,
+    Stream<List<int>> chunks, {
+    FilegateWriteMode mode = FilegateWriteMode.replace,
+  }) async {
+    var size = 0;
+    await for (final chunk in chunks) {
+      size += chunk.length;
+    }
+    return PickedEntry(
+      path: path,
+      name: path.split('/').last,
+      kind: PickedEntryKind.file,
+      metadata: PickedEntryMetadata(
+        size: mode == FilegateWriteMode.append ? 30 + size : size,
         mimeType: 'text/plain',
       ),
     );
