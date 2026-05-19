@@ -86,6 +86,14 @@ class _WriteFileExamplePageState extends State<WriteFileExamplePage> {
     if (target == null) {
       return;
     }
+    final chunks = const <String>[
+      '\n',
+      'streamed by filegate\n',
+    ].map((text) => Uint8List.fromList(text.codeUnits)).toList(growable: false);
+    final totalBytes = chunks.fold<int>(
+      0,
+      (previous, chunk) => previous + chunk.length,
+    );
 
     setState(() {
       _status = 'Streaming chunks to ${target.name}...';
@@ -94,13 +102,20 @@ class _WriteFileExamplePageState extends State<WriteFileExamplePage> {
     try {
       final updated = await widget.filegate.writeStream(
         target.path,
-        Stream<List<int>>.fromIterable(
-          const <String>[
-            '\n',
-            'streamed by filegate\n',
-          ].map((text) => Uint8List.fromList(text.codeUnits)),
-        ),
+        Stream<List<int>>.fromIterable(chunks),
         mode: FilegateWriteMode.append,
+        totalBytes: totalBytes,
+        onProgress: (progress) {
+          if (!mounted) return;
+          final percent = progress.progress == null
+              ? null
+              : (progress.progress! * 100).round();
+          setState(() {
+            _status = percent == null
+                ? 'Streamed ${progress.bytesWritten} bytes to ${target.name}...'
+                : 'Streamed ${progress.bytesWritten}/$totalBytes bytes ($percent%) to ${target.name}...';
+          });
+        },
       );
       if (!mounted) return;
       setState(() {

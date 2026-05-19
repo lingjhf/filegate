@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added Dart-side streamed write progress callbacks for `openWrite()` and
+  `writeStream()`.
+
 ## 1.5.0 - 2026-05-19
 
 ### Added

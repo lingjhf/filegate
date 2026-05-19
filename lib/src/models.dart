@@ -4,6 +4,9 @@ enum FilegateSelectionMode { filesOnly, directoriesOnly, filesAndDirectories }
 
 enum FilegateWriteMode { replace, append }
 
+typedef FilegateWriteProgressCallback =
+    void Function(FileWriteProgress progress);
+
 enum PickedEntryKind { file, directory }
 
 enum FilegateLocationKind { platformPath, fileUri, contentUri, otherUri }
@@ -215,6 +218,27 @@ class FilegateWriteOptions {
 
   Map<String, Object?> toMap() {
     return {'path': path, 'bytes': bytes, 'mode': mode.name};
+  }
+}
+
+class FileWriteProgress {
+  const FileWriteProgress({
+    required this.bytesWritten,
+    required this.totalBytes,
+  });
+
+  final int bytesWritten;
+  final int? totalBytes;
+
+  double? get progress {
+    final totalBytes = this.totalBytes;
+    if (totalBytes == null || totalBytes <= 0) {
+      return null;
+    }
+    if (bytesWritten >= totalBytes) {
+      return 1.0;
+    }
+    return bytesWritten / totalBytes;
   }
 }
 

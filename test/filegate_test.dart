@@ -336,6 +336,62 @@ void main() {
     expect(fakePlatform.lastOpenWriteMode, FilegateWriteMode.append);
   });
 
+  test(
+    'writeStream reports cumulative progress after written chunks',
+    () async {
+      const filegatePlugin = Filegate();
+      final fakePlatform = MockFilegatePlatform();
+      final progressEvents = <FileWriteProgress>[];
+      FilegatePlatform.instance = fakePlatform;
+
+      final result = await filegatePlugin.writeStream(
+        '/tmp/export.txt',
+        Stream<List<int>>.fromIterable(const [
+          <int>[1, 2],
+          <int>[],
+          <int>[3],
+        ]),
+        totalBytes: 3,
+        onProgress: progressEvents.add,
+      );
+
+      expect(result.size, 3);
+      expect(progressEvents.map((event) => event.bytesWritten), const <int>[
+        2,
+        3,
+      ]);
+      expect(progressEvents.map((event) => event.totalBytes), const <int?>[
+        3,
+        3,
+      ]);
+      expect(progressEvents.first.progress, closeTo(2 / 3, 0.0001));
+      expect(progressEvents.last.progress, 1.0);
+    },
+  );
+
+  test('openWrite reports progress for manual chunk writes', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    final progressEvents = <FileWriteProgress>[];
+    FilegatePlatform.instance = fakePlatform;
+
+    final session = await filegatePlugin.openWrite(
+      '/tmp/export.txt',
+      totalBytes: 4,
+      onProgress: progressEvents.add,
+    );
+    await session.add(const <int>[1, 2]);
+    await session.add(const <int>[]);
+    await session.add(const <int>[3, 4, 5]);
+    await session.close();
+
+    expect(progressEvents.map((event) => event.bytesWritten), const <int>[
+      2,
+      5,
+    ]);
+    expect(progressEvents.last.progress, 1.0);
+  });
+
   test('writeStream validates paths before touching platform', () async {
     const filegatePlugin = Filegate();
     final fakePlatform = MockFilegatePlatform();
@@ -348,6 +404,30 @@ void main() {
 
     expect(fakePlatform.openWriteCount, 0);
   });
+
+  test(
+    'write progress validates totalBytes before touching platform',
+    () async {
+      const filegatePlugin = Filegate();
+      final fakePlatform = MockFilegatePlatform();
+      FilegatePlatform.instance = fakePlatform;
+
+      await expectLater(
+        () => filegatePlugin.openWrite('/tmp/export.txt', totalBytes: -1),
+        throwsA(isA<ArgumentError>()),
+      );
+      await expectLater(
+        () => filegatePlugin.writeStream(
+          '/tmp/export.txt',
+          const Stream<List<int>>.empty(),
+          totalBytes: -1,
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      expect(fakePlatform.openWriteCount, 0);
+    },
+  );
 
   test(
     'writeStream cancels the session when the source stream fails',
@@ -373,6 +453,35 @@ void main() {
             FilegateErrorCode.writeFailed,
           ),
         ),
+      );
+
+      expect(fakePlatform.writeChunks.map((chunk) => chunk.toList()), const [
+        <int>[1],
+      ]);
+      expect(fakePlatform.writeCloseCount, 0);
+      expect(fakePlatform.writeCancelCount, 1);
+    },
+  );
+
+  test(
+    'writeStream cancels the session when progress callback fails',
+    () async {
+      const filegatePlugin = Filegate();
+      final fakePlatform = MockFilegatePlatform();
+      FilegatePlatform.instance = fakePlatform;
+
+      await expectLater(
+        () => filegatePlugin.writeStream(
+          '/tmp/export.txt',
+          Stream<List<int>>.fromIterable(const [
+            <int>[1],
+            <int>[2],
+          ]),
+          onProgress: (_) {
+            throw StateError('progress failed');
+          },
+        ),
+        throwsA(isA<StateError>()),
       );
 
       expect(fakePlatform.writeChunks.map((chunk) => chunk.toList()), const [
@@ -887,6 +996,25 @@ void main() {
     expect(chunk.progress, isNull);
   });
 
+  test('file write progress reports percentages and caps at complete', () {
+    expect(
+      const FileWriteProgress(bytesWritten: 3, totalBytes: 12).progress,
+      closeTo(0.25, 0.0001),
+    );
+    expect(
+      const FileWriteProgress(bytesWritten: 13, totalBytes: 12).progress,
+      1.0,
+    );
+    expect(
+      const FileWriteProgress(bytesWritten: 3, totalBytes: null).progress,
+      isNull,
+    );
+    expect(
+      const FileWriteProgress(bytesWritten: 3, totalBytes: 0).progress,
+      isNull,
+    );
+  });
+
   test('pick options normalize recursive and extensions', () {
     const options = FilegatePickOptions(
       recursive: true,
@@ -1337,5 +1465,32 @@ void main() {
 
     await expectLater(session.add(const [1]), throwsA(isA<StateError>()));
     await expectLater(session.close(), throwsA(isA<StateError>()));
+  });
+
+  test('file write session reports progress after successful adds', () async {
+    final progressEvents = <FileWriteProgress>[];
+    final session = FileWriteSession(
+      onAdd: (_) async {},
+      onClose: () async {
+        return const PickedEntry(
+          path: '/tmp/example.txt',
+          name: 'example.txt',
+          kind: PickedEntryKind.file,
+        );
+      },
+      onCancel: () async {},
+      totalBytes: 3,
+      onProgress: progressEvents.add,
+    );
+
+    await session.add(const <int>[1]);
+    await session.add(const <int>[]);
+    await session.add(const <int>[2, 3]);
+
+    expect(progressEvents.map((event) => event.bytesWritten), const <int>[
+      1,
+      3,
+    ]);
+    expect(progressEvents.last.progress, 1.0);
   });
 }

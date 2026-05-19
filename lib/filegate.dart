@@ -46,17 +46,37 @@ class Filegate {
   Future<FileWriteSession> openWrite(
     String path, {
     FilegateWriteMode mode = FilegateWriteMode.replace,
-  }) {
+    int? totalBytes,
+    FilegateWriteProgressCallback? onProgress,
+  }) async {
     _validateWritePath(path);
-    return FilegatePlatform.instance.openWrite(path, mode: mode);
+    _validateWriteProgressTotalBytes(totalBytes);
+    final session = await FilegatePlatform.instance.openWrite(path, mode: mode);
+    if (onProgress == null) {
+      return session;
+    }
+    return FileWriteSession(
+      onAdd: session.add,
+      onClose: session.close,
+      onCancel: session.cancel,
+      totalBytes: totalBytes,
+      onProgress: onProgress,
+    );
   }
 
   Future<PickedEntry> writeStream(
     String path,
     Stream<List<int>> chunks, {
     FilegateWriteMode mode = FilegateWriteMode.replace,
+    int? totalBytes,
+    FilegateWriteProgressCallback? onProgress,
   }) async {
-    final session = await openWrite(path, mode: mode);
+    final session = await openWrite(
+      path,
+      mode: mode,
+      totalBytes: totalBytes,
+      onProgress: onProgress,
+    );
     try {
       await session.addStream(chunks);
       return await session.close();
@@ -425,6 +445,16 @@ void _validateWriteOptions(FilegateWriteOptions options) {
 void _validateWritePath(String path) {
   if (path.isEmpty) {
     throw ArgumentError.value(path, 'path', 'path must not be empty');
+  }
+}
+
+void _validateWriteProgressTotalBytes(int? totalBytes) {
+  if (totalBytes != null && totalBytes < 0) {
+    throw ArgumentError.value(
+      totalBytes,
+      'totalBytes',
+      'totalBytes must not be negative',
+    );
   }
 }
 

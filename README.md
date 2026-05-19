@@ -54,6 +54,7 @@ package-level feature.
 | Append to existing file without picker | ✓ |  |  |
 | Empty-byte replace/append contract | ✓ |  |  |
 | Streamed direct write | ✓ |  |  |
+| Streamed write progress callback | ✓ |  |  |
 | Cancellable write session | ✓ |  |  |
 | Chunked file reading | ✓ | ✓ | ✓ |
 | Cancellable read session | ✓ |  |  |
@@ -226,6 +227,25 @@ final updated = await filegate.writeStream(
 print(updated.size);
 ```
 
+### Stream bytes with progress
+
+```dart
+final updated = await filegate.writeStream(
+  '/path/to/file.bin',
+  Stream<List<int>>.fromIterable([
+    Uint8List.fromList([1, 2, 3]),
+    Uint8List.fromList([4, 5, 6]),
+  ]),
+  totalBytes: 6,
+  onProgress: (progress) {
+    print(progress.bytesWritten);
+    print(progress.progress);
+  },
+);
+
+print(updated.size);
+```
+
 ### Read with progress
 
 ```dart
@@ -285,8 +305,9 @@ Methods:
   dialog.
 - `writeFile(...)`: Replaces or appends bytes to an existing file path or URI.
 - `writeStream(...)`: Replaces or appends streamed byte chunks to an existing
-  file path or URI.
-- `openWrite(...)`: Opens a cancellable write session for manual chunk writes.
+  file path or URI, with optional cumulative progress callbacks.
+- `openWrite(...)`: Opens a cancellable write session for manual chunk writes,
+  with optional cumulative progress callbacks.
 - `getFileSize(String path)`: Returns a file size when known.
 - `openRead(String path, {int chunkSize, int start, int? end})`: Opens a
   cancellable byte stream. `start` is inclusive and `end` is exclusive.

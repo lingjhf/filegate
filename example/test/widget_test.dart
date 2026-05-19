@@ -259,10 +259,18 @@ class _FakeFilegate extends Filegate {
     String path,
     Stream<List<int>> chunks, {
     FilegateWriteMode mode = FilegateWriteMode.replace,
+    int? totalBytes,
+    FilegateWriteProgressCallback? onProgress,
   }) async {
     var size = 0;
     await for (final chunk in chunks) {
+      if (chunk.isEmpty) {
+        continue;
+      }
       size += chunk.length;
+      onProgress?.call(
+        FileWriteProgress(bytesWritten: size, totalBytes: totalBytes),
+      );
     }
     return PickedEntry(
       path: path,

@@ -69,6 +69,12 @@ semantics below unless a future changelog calls out a breaking change.
   existing file path or URI without buffering the full payload in Dart.
 - `openWrite(path, mode: mode)` opens a write session for advanced producers
   that need to add chunks manually, then `close()` or `cancel()` the session.
+- `writeStream()` and `openWrite()` may receive `totalBytes` and `onProgress`.
+  The progress callback runs after a non-empty chunk is accepted by the native
+  write call and reports cumulative bytes written from Dart. It does not
+  guarantee that bytes have been fsync-persisted to storage.
+- `totalBytes` is optional and must not be negative. When omitted, progress
+  events still include `bytesWritten`, but percentage progress is null.
 - `FilegateWriteMode.replace` truncates the target before writing.
 - `FilegateWriteMode.append` writes at the end of the existing target.
 - Empty byte payloads are valid. Replace mode truncates to an empty file, and

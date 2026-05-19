@@ -8,18 +8,25 @@ class FileWriteSession {
     required Future<void> Function(Uint8List chunk) onAdd,
     required Future<PickedEntry> Function() onClose,
     required Future<void> Function() onCancel,
+    int? totalBytes,
+    FilegateWriteProgressCallback? onProgress,
   }) : _onAdd = onAdd,
        _onClose = onClose,
-       _onCancel = onCancel;
+       _onCancel = onCancel,
+       _totalBytes = totalBytes,
+       _onProgress = onProgress;
 
   final Future<void> Function(Uint8List chunk) _onAdd;
   final Future<PickedEntry> Function() _onClose;
   final Future<void> Function() _onCancel;
+  final int? _totalBytes;
+  final FilegateWriteProgressCallback? _onProgress;
 
   Future<void> _tail = Future<void>.value();
   bool _closeRequested = false;
   bool _cancelRequested = false;
   bool _closed = false;
+  int _bytesWritten = 0;
   Future<PickedEntry>? _closeFuture;
   Future<void>? _cancelFuture;
 
@@ -39,7 +46,15 @@ class FileWriteSession {
       if (bytes.isEmpty) {
         return Future<void>.value();
       }
-      return _onAdd(bytes);
+      return _onAdd(bytes).then((_) {
+        _bytesWritten += bytes.length;
+        _onProgress?.call(
+          FileWriteProgress(
+            bytesWritten: _bytesWritten,
+            totalBytes: _totalBytes,
+          ),
+        );
+      });
     });
   }
 
