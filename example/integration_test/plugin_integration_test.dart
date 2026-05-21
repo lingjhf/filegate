@@ -27,57 +27,42 @@ void main() {
   ) async {
     await tester.pumpWidget(MyApp(filegate: _FakeFilegate()));
 
-    await tester.tap(
-      find.byKey(const ValueKey<String>('capabilities-example-tile')),
-    );
-    await _pumpFrames(tester);
+    await _openExamplePage(tester, 'capabilities-example-tile');
     expect(
       find.byKey(const ValueKey<String>('capabilities-list')),
       findsOneWidget,
     );
 
-    await tester.pageBack();
-    await _pumpFrames(tester);
-    await tester.tap(find.byKey(const ValueKey<String>('files-example-tile')));
-    await _pumpFrames(tester);
+    await _returnToExampleList(tester);
+    await _openExamplePage(tester, 'files-example-tile');
     expect(
       find.byKey(const ValueKey<String>('pick-files-button')),
       findsOneWidget,
     );
 
-    await tester.pageBack();
-    await _pumpFrames(tester);
-    await tester.tap(
-      find.byKey(const ValueKey<String>('directory-example-tile')),
-    );
-    await _pumpFrames(tester);
+    await _returnToExampleList(tester);
+    await _openExamplePage(tester, 'directory-example-tile');
     expect(
       find.byKey(const ValueKey<String>('pick-directory-button')),
       findsOneWidget,
     );
 
-    await tester.pageBack();
-    await _pumpFrames(tester);
-    await tester.tap(find.byKey(const ValueKey<String>('read-example-tile')));
-    await _pumpFrames(tester);
+    await _returnToExampleList(tester);
+    await _openExamplePage(tester, 'read-example-tile');
     expect(
       find.byKey(const ValueKey<String>('read-file-button')),
       findsOneWidget,
     );
 
-    await tester.pageBack();
-    await _pumpFrames(tester);
-    await tester.tap(find.byKey(const ValueKey<String>('save-example-tile')));
-    await _pumpFrames(tester);
+    await _returnToExampleList(tester);
+    await _openExamplePage(tester, 'save-example-tile');
     expect(
       find.byKey(const ValueKey<String>('save-file-button')),
       findsOneWidget,
     );
 
-    await tester.pageBack();
-    await _pumpFrames(tester);
-    await tester.tap(find.byKey(const ValueKey<String>('write-example-tile')));
-    await _pumpFrames(tester);
+    await _returnToExampleList(tester);
+    await _openExamplePage(tester, 'write-example-tile');
     expect(
       find.byKey(const ValueKey<String>('pick-write-target-button')),
       findsOneWidget,
@@ -347,6 +332,20 @@ void main() {
 Future<void> _pumpFrames(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 350));
+}
+
+Future<void> _openExamplePage(WidgetTester tester, String tileKey) async {
+  final tile = find.byKey(ValueKey<String>(tileKey));
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(tile);
+  await tester.tap(tile);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _returnToExampleList(WidgetTester tester) async {
+  await tester.pageBack();
+  await tester.pumpAndSettle();
+  expect(find.text('filegate example'), findsOneWidget);
 }
 
 class _FakeFilegate extends Filegate {
