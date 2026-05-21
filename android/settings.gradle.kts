@@ -1,1 +1,1 @@
-rootProject.name = 'filegate'
+rootProject.name = "filegate"
