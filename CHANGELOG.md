@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0 - 2026-05-21
+
+### Changed
+
+- Updated Dart constructors to use private named initializing formals where
+  available with Dart 3.12.
+
 ## 1.6.0 - 2026-05-19
 
 ### Added
