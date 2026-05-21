@@ -12,8 +12,7 @@ import 'src/models.dart';
 
 /// An implementation of [FilegatePlatform] that uses method channels.
 class MethodChannelFilegate extends FilegatePlatform {
-  MethodChannelFilegate({@visibleForTesting bool forceNativeRead = false})
-    : _forceNativeRead = forceNativeRead;
+  MethodChannelFilegate({@visibleForTesting this._forceNativeRead = false});
 
   static const _readChannelPrefix = 'filegate/read';
   final bool _forceNativeRead;

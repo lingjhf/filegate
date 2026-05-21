@@ -1,10 +1,7 @@
 import 'dart:async';
 
 class FileReadSession<T> {
-  FileReadSession({
-    required this.stream,
-    required Future<void> Function() onCancel,
-  }) : _onCancel = onCancel;
+  FileReadSession({required this.stream, required this._onCancel});
 
   final Stream<T> stream;
   final Future<void> Function() _onCancel;

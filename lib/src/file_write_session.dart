@@ -5,16 +5,12 @@ import 'models.dart';
 
 class FileWriteSession {
   FileWriteSession({
-    required Future<void> Function(Uint8List chunk) onAdd,
-    required Future<PickedEntry> Function() onClose,
-    required Future<void> Function() onCancel,
-    int? totalBytes,
-    FilegateWriteProgressCallback? onProgress,
-  }) : _onAdd = onAdd,
-       _onClose = onClose,
-       _onCancel = onCancel,
-       _totalBytes = totalBytes,
-       _onProgress = onProgress;
+    required this._onAdd,
+    required this._onClose,
+    required this._onCancel,
+    this._totalBytes,
+    this._onProgress,
+  });
 
   final Future<void> Function(Uint8List chunk) _onAdd;
   final Future<PickedEntry> Function() _onClose;
