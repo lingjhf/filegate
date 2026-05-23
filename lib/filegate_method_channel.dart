@@ -365,7 +365,7 @@ class MethodChannelFilegate extends FilegatePlatform {
       return cancelFuture ??= () async {
         cancelled = true;
         final hasStartedStream = subscription != null || streamId != null;
-        await subscription?.cancel();
+        await _cancelEventSubscription(subscription);
         await cancelStartedRead();
         final closeFuture = _closeController(
           controller,
@@ -476,6 +476,20 @@ class MethodChannelFilegate extends FilegatePlatform {
       await methodChannel.invokeMethod<void>('cancelRead', {
         'streamId': streamId,
       });
+    } on PlatformException {
+      // Ignore cancellation failures because the consumer already requested
+      // shutdown and the native stream may have ended naturally.
+    }
+  }
+
+  static Future<void> _cancelEventSubscription(
+    StreamSubscription<dynamic>? subscription,
+  ) async {
+    try {
+      await subscription?.cancel();
+    } on MissingPluginException {
+      // Ignore cancellation failures because the native dynamic event channel
+      // may have ended and been released before Dart observes stream teardown.
     } on PlatformException {
       // Ignore cancellation failures because the consumer already requested
       // shutdown and the native stream may have ended naturally.

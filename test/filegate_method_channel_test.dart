@@ -29,6 +29,7 @@ void main() {
   PlatformException? startWriteError;
   bool cancelReadThrows = false;
   bool cancelWriteThrows = false;
+  bool eventChannelCancelMissing = false;
 
   setUp(() {
     methodCalls.clear();
@@ -85,6 +86,7 @@ void main() {
     startWriteError = null;
     cancelReadThrows = false;
     cancelWriteThrows = false;
+    eventChannelCancelMissing = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
           methodCalls.add(methodCall);
@@ -153,6 +155,9 @@ void main() {
         .setMockMessageHandler('filegate/read/stream-1', (message) async {
           final codec = const StandardMethodCodec();
           final methodCall = codec.decodeMethodCall(message);
+          if (methodCall.method == 'cancel' && eventChannelCancelMissing) {
+            return null;
+          }
           if (methodCall.method == 'listen') {
             final error = streamError;
             if (error != null) {
@@ -847,6 +852,19 @@ void main() {
     await session.stream.drain<void>();
 
     await expectLater(session.cancel(), completes);
+  });
+
+  test('cancel ignores missing dynamic event channel after read end', () async {
+    eventChannelCancelMissing = true;
+
+    final session = platform.openRead('/tmp/example.txt');
+    await session.stream.drain<void>();
+
+    await expectLater(session.cancel(), completes);
+    expect(
+      methodCalls.where((call) => call.method == 'cancelRead'),
+      hasLength(1),
+    );
   });
 
   test('openRead reports desktop directory paths as not_a_file', () async {

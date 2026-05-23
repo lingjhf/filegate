@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.1 - 2026-05-24
+
+### Fixed
+
+- Kept iOS read event channels registered until Flutter deactivates the stream,
+  avoiding `MissingPluginException` during read stream teardown.
+- Ignored Dart-side dynamic event-channel cancellation failures after a read
+  stream has already ended.
+
 ## 1.7.0 - 2026-05-21
 
 ### Changed

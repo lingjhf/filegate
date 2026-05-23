@@ -789,10 +789,8 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
     do {
       handle = try handleFactory()
     } catch let error as FilegateError {
-      disposeIfNeeded()
       return FlutterError(code: error.code, message: error.message, details: error.details)
     } catch {
-      disposeIfNeeded()
       return FlutterError(code: "read_open_failed", message: error.localizedDescription, details: errorDetails)
     }
 
@@ -901,7 +899,6 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
       fileHandle = nil
       eventSink = nil
     }
-    disposeIfNeeded()
   }
 
   private func disposeIfNeeded() {
