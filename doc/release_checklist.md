@@ -15,4 +15,5 @@ Run this checklist before every version commit.
 
 The local release gate is captured in `tool/run_release_checks.sh`.
 
-Do not create a semver tag unless the package should be published to pub.dev.
+Do not create a `v`-prefixed semver tag unless the package should be published
+to pub.dev.
