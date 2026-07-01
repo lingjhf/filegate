@@ -812,11 +812,10 @@ class FilegatePlugin :
         val uri = Uri.parse(identifier)
         return when (uri.scheme) {
             "content" -> {
-                if (DocumentsContract.isTreeUri(uri)) {
+                if (isTreeUri(identifier)) {
                     true
                 } else {
-                    DocumentFile.fromSingleUri(applicationContext, uri)?.isDirectory == true ||
-                        DocumentFile.fromTreeUri(applicationContext, uri)?.isDirectory == true
+                    DocumentFile.fromSingleUri(applicationContext, uri)?.isDirectory == true
                 }
             }
             "file" -> File(uri.path.orEmpty()).isDirectory
@@ -1255,5 +1254,11 @@ class FilegatePlugin :
         private const val readChannelPrefix = "filegate/read"
         private const val mixedModeUnsupportedMessage =
             "Android Storage Access Framework does not provide a single system picker intent for mixed file and directory selection. Use ACTION_OPEN_DOCUMENT for files or ACTION_OPEN_DOCUMENT_TREE for directories."
+
+        internal fun isTreeUri(identifier: String): Boolean {
+            return runCatching {
+                DocumentsContract.isTreeUri(Uri.parse(identifier))
+            }.getOrDefault(false)
+        }
     }
 }

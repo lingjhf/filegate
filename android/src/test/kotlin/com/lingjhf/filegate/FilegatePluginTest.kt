@@ -16,6 +16,14 @@ import kotlin.test.Test
 
 internal class FilegatePluginTest {
     @Test
+    fun isTreeUri_returnsFalseForMediaProviderContentUri() {
+        assertEquals(
+            false,
+            FilegatePlugin.isTreeUri("content://media/external/images/media/100")
+        )
+    }
+
+    @Test
     fun onMethodCall_getFileSizeWithMissingPath_returnsInvalidArgs() {
         val plugin = FilegatePlugin()
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.2 - 2026-07-01
+
+### Fixed
+
+- Avoided Android `Invalid URI` failures when reading media provider
+  `content://` picks by treating non-tree content URIs as file streams.
+
 ## 1.7.1 - 2026-05-24
 
 ### Fixed
