@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "filegate",
     platforms: [
-        .macOS("11.0")
+        .macOS("12.0")
     ],
     products: [
         .library(name: "filegate", targets: ["filegate"])

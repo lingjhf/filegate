@@ -25,9 +25,29 @@ class Filegate {
     return FilegatePlatform.instance.pick(options);
   }
 
+  Future<List<PickedEntry>?> pickMedia(FilegateMediaPickOptions options) {
+    return FilegatePlatform.instance.pickMedia(options);
+  }
+
   Future<PickedEntry?> save(FilegateSaveOptions options) {
     _validateSaveOptions(options);
     return FilegatePlatform.instance.save(options);
+  }
+
+  Future<FilegateGallerySaveResult> saveToGallery(
+    Uint8List bytes, {
+    required String fileName,
+    String? mimeType,
+  }) {
+    final mediaType = _galleryMediaTypeFor(fileName, mimeType);
+    final options = FilegateGallerySaveOptions(
+      bytes: bytes,
+      fileName: fileName,
+      mediaType: mediaType,
+      mimeType: mimeType,
+    );
+    _validateGallerySaveOptions(options);
+    return FilegatePlatform.instance.saveToGallery(options);
   }
 
   Future<PickedEntry> write(FilegateWriteOptions options) {
@@ -162,6 +182,44 @@ class Filegate {
         allowedExtensions: allowedExtensions,
         title: title,
         initialDirectory: initialDirectory,
+        persistAccess: persistAccess,
+      ),
+    );
+  }
+
+  Future<List<PickedEntry>?> pickImages({
+    int selectionLimit = 1,
+    bool persistAccess = true,
+  }) {
+    return pickMedia(
+      FilegateMediaPickOptions(
+        mediaType: FilegateMediaType.images,
+        selectionLimit: selectionLimit,
+        persistAccess: persistAccess,
+      ),
+    );
+  }
+
+  Future<List<PickedEntry>?> pickVideos({
+    int selectionLimit = 1,
+    bool persistAccess = true,
+  }) {
+    return pickMedia(
+      FilegateMediaPickOptions(
+        mediaType: FilegateMediaType.videos,
+        selectionLimit: selectionLimit,
+        persistAccess: persistAccess,
+      ),
+    );
+  }
+
+  Future<List<PickedEntry>?> pickImagesAndVideos({
+    int selectionLimit = 1,
+    bool persistAccess = true,
+  }) {
+    return pickMedia(
+      FilegateMediaPickOptions(
+        selectionLimit: selectionLimit,
         persistAccess: persistAccess,
       ),
     );
@@ -438,6 +496,66 @@ void _validateSaveOptions(FilegateSaveOptions options) {
   }
 }
 
+void _validateGallerySaveOptions(FilegateGallerySaveOptions options) {
+  if (options.bytes.isEmpty) {
+    throw ArgumentError.value(
+      options.bytes,
+      'bytes',
+      'bytes must not be empty',
+    );
+  }
+  if (options.fileName.trim().isEmpty) {
+    throw ArgumentError.value(
+      options.fileName,
+      'fileName',
+      'fileName must not be empty',
+    );
+  }
+  if (options.fileName.contains('/') || options.fileName.contains(r'\')) {
+    throw ArgumentError.value(
+      options.fileName,
+      'fileName',
+      'fileName must be a file name, not a path',
+    );
+  }
+}
+
+FilegateGalleryMediaType _galleryMediaTypeFor(
+  String fileName,
+  String? mimeType,
+) {
+  final normalizedMimeType = mimeType?.trim().toLowerCase();
+  if (normalizedMimeType != null && normalizedMimeType.isNotEmpty) {
+    if (normalizedMimeType.startsWith('image/')) {
+      return FilegateGalleryMediaType.image;
+    }
+    if (normalizedMimeType.startsWith('video/')) {
+      return FilegateGalleryMediaType.video;
+    }
+    throw PlatformException(
+      code: FilegateErrorCode.unsupportedMode,
+      message: 'Only image and video files can be saved to the system gallery.',
+      details: mimeType,
+    );
+  }
+
+  final extension = _extension(fileName);
+  if (extension != null) {
+    if (_imageGalleryExtensions.contains(extension)) {
+      return FilegateGalleryMediaType.image;
+    }
+    if (_videoGalleryExtensions.contains(extension)) {
+      return FilegateGalleryMediaType.video;
+    }
+  }
+
+  throw PlatformException(
+    code: FilegateErrorCode.unsupportedMode,
+    message: 'Only image and video files can be saved to the system gallery.',
+    details: mimeType ?? fileName,
+  );
+}
+
 void _validateWriteOptions(FilegateWriteOptions options) {
   _validateWritePath(options.path);
 }
@@ -511,3 +629,25 @@ String? _extension(String path) {
   }
   return name.substring(dotIndex + 1).toLowerCase();
 }
+
+const _imageGalleryExtensions = <String>{
+  'jpg',
+  'jpeg',
+  'png',
+  'gif',
+  'heic',
+  'heif',
+  'webp',
+  'bmp',
+};
+
+const _videoGalleryExtensions = <String>{
+  'mp4',
+  'mov',
+  'm4v',
+  '3gp',
+  '3gpp',
+  'avi',
+  'mkv',
+  'webm',
+};

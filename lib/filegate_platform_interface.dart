@@ -36,8 +36,18 @@ abstract class FilegatePlatform extends PlatformInterface {
     throw UnimplementedError('pick() has not been implemented.');
   }
 
+  Future<List<PickedEntry>?> pickMedia(FilegateMediaPickOptions options) {
+    throw UnimplementedError('pickMedia() has not been implemented.');
+  }
+
   Future<PickedEntry?> save(FilegateSaveOptions options) {
     throw UnimplementedError('save() has not been implemented.');
+  }
+
+  Future<FilegateGallerySaveResult> saveToGallery(
+    FilegateGallerySaveOptions options,
+  ) {
+    throw UnimplementedError('saveToGallery() has not been implemented.');
   }
 
   Future<PickedEntry> write(FilegateWriteOptions options) {

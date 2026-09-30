@@ -12,17 +12,21 @@ import 'src/models.dart';
 
 /// An implementation of [FilegatePlatform] that uses method channels.
 class MethodChannelFilegate extends FilegatePlatform {
-  MethodChannelFilegate({@visibleForTesting this._forceNativeRead = false});
+  MethodChannelFilegate({
+    @visibleForTesting this.forceNativeRead = false,
+    @visibleForTesting String? operatingSystem,
+  }) : _operatingSystem = operatingSystem ?? Platform.operatingSystem;
 
   static const _readChannelPrefix = 'filegate/read';
-  final bool _forceNativeRead;
+  final bool forceNativeRead;
+  final String _operatingSystem;
 
   @visibleForTesting
   final methodChannel = const MethodChannel('filegate');
 
   @override
   Future<FilegateCapabilities> getCapabilities() async {
-    return capabilitiesForOperatingSystem(Platform.operatingSystem);
+    return capabilitiesForOperatingSystem(_operatingSystem);
   }
 
   @visibleForTesting
@@ -40,6 +44,8 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsFileSaving: true,
         supportsFileWriting: true,
         supportsFileStreamWriting: true,
+        supportsMediaPicking: true,
+        supportsGallerySaving: true,
       ),
       'ios' => const FilegateCapabilities(
         supportsFilePicking: true,
@@ -51,6 +57,8 @@ class MethodChannelFilegate extends FilegatePlatform {
         supportsFileSaving: true,
         supportsFileWriting: true,
         supportsFileStreamWriting: true,
+        supportsMediaPicking: true,
+        supportsGallerySaving: true,
       ),
       'macos' => const FilegateCapabilities(
         supportsFilePicking: true,
@@ -103,6 +111,20 @@ class MethodChannelFilegate extends FilegatePlatform {
       options.toMap(),
     );
 
+    return _decodePickedEntries(entries);
+  }
+
+  @override
+  Future<List<PickedEntry>?> pickMedia(FilegateMediaPickOptions options) async {
+    final entries = await methodChannel.invokeListMethod<Object?>(
+      'pickMedia',
+      options.toMap(),
+    );
+
+    return _decodePickedEntries(entries);
+  }
+
+  List<PickedEntry>? _decodePickedEntries(List<Object?>? entries) {
     if (entries == null) {
       return null;
     }
@@ -145,6 +167,26 @@ class MethodChannelFilegate extends FilegatePlatform {
     }
 
     return PickedEntry.fromMap(entry);
+  }
+
+  @override
+  Future<FilegateGallerySaveResult> saveToGallery(
+    FilegateGallerySaveOptions options,
+  ) async {
+    if (_operatingSystem != 'android' && _operatingSystem != 'ios') {
+      throw PlatformException(
+        code: FilegateErrorCode.unsupportedMode,
+        message:
+            'Saving media to the system gallery is supported on Android and iOS only.',
+      );
+    }
+
+    final result = await methodChannel.invokeMapMethod<Object?, Object?>(
+      'saveToGallery',
+      options.toMap(),
+    );
+
+    return FilegateGallerySaveResult.fromMap(_castMap(result));
   }
 
   @override
@@ -240,7 +282,7 @@ class MethodChannelFilegate extends FilegatePlatform {
       );
     }
 
-    if (!_forceNativeRead &&
+    if (!forceNativeRead &&
         (Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
       return _openDesktopRead(
         path,

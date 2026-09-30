@@ -21,7 +21,7 @@ reading for paths available to Dart uses `dart:io`.
 
 ## Feature comparison
 
-Compared with this package (`filegate` 1.6.0) and the latest stable pub.dev
+Compared with this package (`filegate` 1.9.0) and the latest stable pub.dev
 versions checked on 2026-05-18:
 [`file_selector` 1.1.0](https://pub.dev/packages/file_selector) and
 [`file_picker` 11.0.2](https://pub.dev/packages/file_picker).
@@ -65,6 +65,7 @@ package-level feature.
 | Result modified time metadata | ✓ | ✓ |  |
 | Result MIME type metadata | ✓ | ✓ |  |
 | Android persisted URI access option | ✓ |  |  |
+| Save image/video to system gallery | ✓ |  |  |
 
 `saveFile` is the save/save-as flow for creating or replacing a user-chosen
 target. Appending is intentionally modeled as direct writing to an existing
@@ -77,7 +78,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  filegate: ^1.6.0
+  filegate: ^1.9.0
 ```
 
 If you are using this repository directly:
@@ -102,6 +103,12 @@ File picking uses the Android Storage Access Framework.
 
 - File selection uses `ACTION_OPEN_DOCUMENT`.
 - Directory selection uses `ACTION_OPEN_DOCUMENT_TREE`.
+- Media selection uses the system Photo Picker on Android 13 and newer.
+  Older Android versions fall back to `ACTION_OPEN_DOCUMENT` with image/video
+  MIME filters.
+- Gallery saving writes images to `MediaStore.Images` and videos to
+  `MediaStore.Video`. Android 10 and newer use scoped storage; older versions
+  require `WRITE_EXTERNAL_STORAGE` access or return `permission_denied`.
 - Mixed file and directory selection in one picker call is not supported by the
   standard Android SAF intents. `pickMixed` returns `unsupported_mode` on
   Android.
@@ -111,13 +118,16 @@ File picking uses the Android Storage Access Framework.
 File picking uses `UIDocumentPickerViewController`. Returned document URLs are
 read using current-session security-scoped access.
 
+- Media selection uses `PHPickerViewController` on iOS 14 and newer.
+- Gallery saving uses Photos add-only access. Host apps must include
+  `NSPhotoLibraryAddUsageDescription` in `Info.plist`.
 - Directory selection enumerates matching files from the selected directory.
 - Mixed file and directory selection returns selected files and files
   enumerated from selected directories.
 
 ### macOS
 
-File picking uses `NSOpenPanel`. The macOS plugin target requires macOS 11.0 or
+File picking uses `NSOpenPanel`. The macOS plugin target requires macOS 12.0 or
 newer.
 
 - Directory selection enumerates matching files from the selected directory.
@@ -167,6 +177,19 @@ if (files != null) {
 }
 ```
 
+### Pick photos and videos
+
+```dart
+final photos = await filegate.pickImages(selectionLimit: 9);
+
+if (photos != null) {
+  for (final photo in photos) {
+    final bytes = await filegate.readAllBytes(photo.path);
+    print('${photo.name}: ${bytes.length} bytes');
+  }
+}
+```
+
 ### Pick files from a directory
 
 ```dart
@@ -199,6 +222,18 @@ final saved = await filegate.saveFile(
 if (saved != null) {
   print(saved.path);
 }
+```
+
+### Save media to the system gallery
+
+```dart
+final result = await filegate.saveToGallery(
+  pngBytes,
+  fileName: 'framesense.png',
+  mimeType: 'image/png',
+);
+
+print(result.identifier);
 ```
 
 ### Append bytes to an existing file
@@ -299,10 +334,14 @@ Methods:
 - `getCapabilities()`: Returns the current platform capability flags.
 - `pick(FilegatePickOptions options)`: Runs a platform picker.
 - `pickFiles(...)`: Picks one or more files.
+- `pickImages(...)`, `pickVideos(...)`, `pickImagesAndVideos(...)`: Picks media
+  from the system photo/video library where supported.
 - `pickDirectoryFiles(...)`: Picks a directory and returns matching files.
 - `pickMixed(...)`: Picks files and directories where supported.
 - `saveFile(...)`: Saves an in-memory byte payload through a native save/export
   dialog.
+- `saveToGallery(...)`: Saves image or video bytes to the system gallery on
+  Android and iOS.
 - `writeFile(...)`: Replaces or appends bytes to an existing file path or URI.
 - `writeStream(...)`: Replaces or appends streamed byte chunks to an existing
   file path or URI, with optional cumulative progress callbacks.

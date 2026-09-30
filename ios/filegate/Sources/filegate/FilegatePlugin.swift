@@ -1,5 +1,7 @@
 import Flutter
 import MobileCoreServices
+import Photos
+import PhotosUI
 import UIKit
 
 public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
@@ -14,6 +16,8 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   private var pendingSelectionMode = "filesOnly"
   private var pendingPickRecursive = false
   private var pendingAllowedExtensions: [String] = []
+  private var pendingMediaResult: FlutterResult?
+  private var pendingMediaType = "imagesAndVideos"
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let instance = FilegatePlugin(binaryMessenger: registrar.messenger())
@@ -34,8 +38,12 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     switch call.method {
     case "pick":
       pick(arguments: call.arguments as? [String: Any], result: result)
+    case "pickMedia":
+      pickMedia(arguments: call.arguments as? [String: Any], result: result)
     case "save":
       save(arguments: call.arguments as? [String: Any], result: result)
+    case "saveToGallery":
+      saveToGallery(arguments: call.arguments as? [String: Any], result: result)
     case "write":
       write(arguments: call.arguments as? [String: Any], result: result)
     case "startWrite":
@@ -100,7 +108,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   }
 
   private func pick(arguments: [String: Any]?, result: @escaping FlutterResult) {
-    guard pendingPickResult == nil && pendingSaveResult == nil else {
+    guard pendingPickResult == nil && pendingSaveResult == nil && pendingMediaResult == nil else {
       result(FlutterError(code: "picker_active", message: "Another file picker request is already active.", details: nil))
       return
     }
@@ -144,8 +152,54 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     presenter.present(picker, animated: true)
   }
 
+  private func pickMedia(arguments: [String: Any]?, result: @escaping FlutterResult) {
+    guard #available(iOS 14.0, *) else {
+      result(FlutterError(code: "unsupported_mode", message: "System media picking requires iOS 14.0 or newer.", details: nil))
+      return
+    }
+
+    guard pendingPickResult == nil && pendingSaveResult == nil && pendingMediaResult == nil else {
+      result(FlutterError(code: "picker_active", message: "Another picker request is already active.", details: nil))
+      return
+    }
+
+    guard let presenter = topViewController() else {
+      result(FlutterError(code: "no_view_controller", message: "No view controller is available to present the media picker.", details: nil))
+      return
+    }
+
+    let mediaType = arguments?["mediaType"] as? String ?? "imagesAndVideos"
+    guard ["images", "videos", "imagesAndVideos"].contains(mediaType) else {
+      result(FlutterError(code: "invalid_args", message: "Unknown media type.", details: mediaType))
+      return
+    }
+    let selectionLimit = arguments?["selectionLimit"] as? Int ?? 1
+    guard selectionLimit >= 0 else {
+      result(FlutterError(code: "invalid_args", message: "selectionLimit must not be negative.", details: selectionLimit))
+      return
+    }
+
+    var configuration = PHPickerConfiguration()
+    configuration.selectionLimit = selectionLimit
+    switch mediaType {
+    case "images":
+      configuration.filter = .images
+    case "videos":
+      configuration.filter = .videos
+    default:
+      configuration.filter = .any(of: [.images, .videos])
+    }
+
+    let picker = PHPickerViewController(configuration: configuration)
+    picker.delegate = self
+    pendingMediaResult = result
+    pendingMediaType = mediaType
+
+    presenter.present(picker, animated: true)
+  }
+
   private func save(arguments: [String: Any]?, result: @escaping FlutterResult) {
-    guard pendingPickResult == nil && pendingSaveResult == nil else {
+    guard pendingPickResult == nil && pendingSaveResult == nil && pendingMediaResult == nil else {
       result(FlutterError(code: "picker_active", message: "Another file picker request is already active.", details: nil))
       return
     }
@@ -196,6 +250,60 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     pendingSaveTemporaryDirectoryURL = temporaryDirectory
 
     presenter.present(picker, animated: true)
+  }
+
+  private func saveToGallery(arguments: [String: Any]?, result: @escaping FlutterResult) {
+    guard pendingPickResult == nil && pendingSaveResult == nil && pendingMediaResult == nil else {
+      result(FlutterError(code: "picker_active", message: "Another picker request is already active.", details: nil))
+      return
+    }
+
+    guard let typedData = arguments?["bytes"] as? FlutterStandardTypedData,
+          !typedData.data.isEmpty else {
+      result(FlutterError(code: "invalid_args", message: "A non-empty byte payload is required.", details: nil))
+      return
+    }
+    guard let fileName = arguments?["fileName"] as? String,
+          isValidFileName(fileName) else {
+      result(FlutterError(code: "invalid_args", message: "A non-empty file name is required.", details: nil))
+      return
+    }
+    guard let mediaType = arguments?["mediaType"] as? String,
+          mediaType == "image" || mediaType == "video" else {
+      result(FlutterError(code: "unsupported_mode", message: "Only image and video files can be saved to the system gallery.", details: arguments?["mediaType"]))
+      return
+    }
+
+    let mimeType = arguments?["mimeType"] as? String
+    requestPhotoLibraryAddAccess { [weak self] isAuthorized in
+      guard let self else {
+        return
+      }
+      guard isAuthorized else {
+        DispatchQueue.main.async {
+          result(FlutterError(code: "permission_denied", message: "Photo library add-only access was denied.", details: nil))
+        }
+        return
+      }
+
+      do {
+        let temporaryFileURL = try self.writeGalleryTemporaryFile(
+          data: typedData.data,
+          fileName: fileName
+        )
+        self.createGalleryAsset(
+          fileURL: temporaryFileURL,
+          fileName: fileName,
+          mediaType: mediaType,
+          mimeType: mimeType,
+          result: result
+        )
+      } catch {
+        DispatchQueue.main.async {
+          result(FlutterError(code: "write_failed", message: error.localizedDescription, details: fileName))
+        }
+      }
+    }
   }
 
   private func write(arguments: [String: Any]?, result: @escaping FlutterResult) {
@@ -491,6 +599,11 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     pendingAllowedExtensions = []
   }
 
+  private func clearPendingMediaState() {
+    pendingMediaResult = nil
+    pendingMediaType = "imagesAndVideos"
+  }
+
   private func completePendingSave(urls: [URL]) {
     let result = pendingSaveResult
     defer {
@@ -514,6 +627,253 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     }
     pendingSaveResult = nil
     pendingSaveTemporaryDirectoryURL = nil
+  }
+
+  private func requestPhotoLibraryAddAccess(completion: @escaping (Bool) -> Void) {
+    if #available(iOS 14.0, *) {
+      PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+        completion(self.hasPhotoLibraryAddAccess(status))
+      }
+    } else {
+      PHPhotoLibrary.requestAuthorization { status in
+        completion(self.hasPhotoLibraryAddAccess(status))
+      }
+    }
+  }
+
+  private func hasPhotoLibraryAddAccess(_ status: PHAuthorizationStatus) -> Bool {
+    if status == .authorized {
+      return true
+    }
+    if #available(iOS 14.0, *), status == .limited {
+      return true
+    }
+    return false
+  }
+
+  private func writeGalleryTemporaryFile(data: Data, fileName: String) throws -> URL {
+    let temporaryDirectory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("filegate-gallery", isDirectory: true)
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: temporaryDirectory,
+      withIntermediateDirectories: true
+    )
+    let temporaryFileURL = temporaryDirectory.appendingPathComponent(
+      sanitizedFileName(fileName)
+    )
+    try data.write(to: temporaryFileURL, options: .atomic)
+    return temporaryFileURL
+  }
+
+  private func createGalleryAsset(
+    fileURL: URL,
+    fileName: String,
+    mediaType: String,
+    mimeType: String?,
+    result: @escaping FlutterResult
+  ) {
+    let resourceType: PHAssetResourceType = mediaType == "image" ? .photo : .video
+    var localIdentifier: String?
+
+    PHPhotoLibrary.shared().performChanges {
+      let request = PHAssetCreationRequest.forAsset()
+      request.addResource(with: resourceType, fileURL: fileURL, options: nil)
+      localIdentifier = request.placeholderForCreatedAsset?.localIdentifier
+    } completionHandler: { success, error in
+      try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent())
+      DispatchQueue.main.async {
+        if success, let localIdentifier {
+          result(self.serializeGallerySaveResult(
+            identifier: localIdentifier,
+            name: fileName,
+            mediaType: mediaType,
+            mimeType: mimeType
+          ))
+          return
+        }
+
+        result(FlutterError(
+          code: "save_failed",
+          message: error?.localizedDescription ?? "Unable to create a gallery asset.",
+          details: fileName
+        ))
+      }
+    }
+  }
+
+  private func serializeGallerySaveResult(
+    identifier: String,
+    name: String,
+    mediaType: String,
+    mimeType: String?
+  ) -> [String: Any?] {
+    [
+      "identifier": identifier,
+      "name": name,
+      "mediaType": mediaType,
+      "mimeType": mimeType
+    ]
+  }
+
+  @available(iOS 14.0, *)
+  private func resolvePickedMediaEntries(
+    results: [PHPickerResult],
+    mediaType: String,
+    completion: @escaping (Swift.Result<[[String: Any]], FilegateError>) -> Void
+  ) {
+    let group = DispatchGroup()
+    let lock = NSLock()
+    var entries = Array<[String: Any]?>(repeating: nil, count: results.count)
+    var firstError: FilegateError?
+
+    func recordError(_ error: FilegateError) {
+      lock.lock()
+      if firstError == nil {
+        firstError = error
+      }
+      lock.unlock()
+    }
+
+    for (index, pickerResult) in results.enumerated() {
+      let itemProvider = pickerResult.itemProvider
+      guard let typeIdentifier = mediaTypeIdentifier(
+        from: itemProvider,
+        mediaType: mediaType
+      ) else {
+        recordError(FilegateError(code: "pick_failed", message: "No readable media representation was returned.", details: nil))
+        continue
+      }
+
+      group.enter()
+      itemProvider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { [weak self] url, error in
+        defer {
+          group.leave()
+        }
+
+        if let error {
+          recordError(FilegateError(code: "pick_failed", message: error.localizedDescription, details: typeIdentifier))
+          return
+        }
+
+        guard let self, let sourceURL = url else {
+          recordError(FilegateError(code: "pick_failed", message: "No media file URL was returned.", details: typeIdentifier))
+          return
+        }
+
+        do {
+          let entry = try self.copyPickedMediaFile(
+            from: sourceURL,
+            itemProvider: itemProvider,
+            typeIdentifier: typeIdentifier,
+            index: index
+          )
+          lock.lock()
+          entries[index] = entry
+          lock.unlock()
+        } catch {
+          recordError(FilegateError(code: "pick_failed", message: error.localizedDescription, details: sourceURL.absoluteString))
+        }
+      }
+    }
+
+    group.notify(queue: .main) {
+      if let firstError {
+        completion(.failure(firstError))
+        return
+      }
+
+      completion(.success(entries.compactMap { $0 }))
+    }
+  }
+
+  @available(iOS 14.0, *)
+  private func mediaTypeIdentifier(
+    from itemProvider: NSItemProvider,
+    mediaType: String
+  ) -> String? {
+    let identifiers = itemProvider.registeredTypeIdentifiers
+    let preferredIdentifier = identifiers.first { identifier in
+      switch mediaType {
+      case "images":
+        return isTypeIdentifier(identifier, conformingTo: kUTTypeImage as String)
+      case "videos":
+        return isTypeIdentifier(identifier, conformingTo: kUTTypeMovie as String)
+      default:
+        return isTypeIdentifier(identifier, conformingTo: kUTTypeImage as String) ||
+          isTypeIdentifier(identifier, conformingTo: kUTTypeMovie as String)
+      }
+    }
+    return preferredIdentifier ?? identifiers.first
+  }
+
+  private func isTypeIdentifier(_ identifier: String, conformingTo parentIdentifier: String) -> Bool {
+    UTTypeConformsTo(identifier as CFString, parentIdentifier as CFString)
+  }
+
+  @available(iOS 14.0, *)
+  private func copyPickedMediaFile(
+    from sourceURL: URL,
+    itemProvider: NSItemProvider,
+    typeIdentifier: String,
+    index: Int
+  ) throws -> [String: Any] {
+    let directoryURL = FileManager.default.temporaryDirectory
+      .appendingPathComponent("filegate-media", isDirectory: true)
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: directoryURL,
+      withIntermediateDirectories: true
+    )
+
+    let fileName = mediaFileName(
+      sourceURL: sourceURL,
+      itemProvider: itemProvider,
+      typeIdentifier: typeIdentifier,
+      index: index
+    )
+    let destinationURL = directoryURL.appendingPathComponent(fileName)
+    try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+    return serializeFileEntry(destinationURL)
+  }
+
+  @available(iOS 14.0, *)
+  private func mediaFileName(
+    sourceURL: URL,
+    itemProvider: NSItemProvider,
+    typeIdentifier: String,
+    index: Int
+  ) -> String {
+    var fileName = sanitizedFileName(
+      itemProvider.suggestedName ?? sourceURL.lastPathComponent
+    )
+    if fileName.isEmpty {
+      fileName = "media-\(index + 1)"
+    }
+
+    if URL(fileURLWithPath: fileName).pathExtension.isEmpty {
+      let pathExtension = sourceURL.pathExtension.isEmpty
+        ? preferredFilenameExtension(for: typeIdentifier)
+        : sourceURL.pathExtension
+      if let pathExtension, !pathExtension.isEmpty {
+        fileName += ".\(pathExtension)"
+      }
+    }
+    return fileName
+  }
+
+  private func sanitizedFileName(_ value: String) -> String {
+    value
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .components(separatedBy: CharacterSet(charactersIn: "/\\:"))
+      .joined(separator: "_")
+  }
+
+  private func preferredFilenameExtension(for typeIdentifier: String) -> String? {
+    UTTypeCopyPreferredTagWithClass(
+      typeIdentifier as CFString,
+      kUTTagClassFilenameExtension
+    )?.takeRetainedValue() as String?
   }
 
   private func resolvePickedEntries(
@@ -748,6 +1108,37 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       controller = presentedViewController
     }
     return controller
+  }
+}
+
+@available(iOS 14.0, *)
+extension FilegatePlugin: PHPickerViewControllerDelegate {
+  public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+    picker.dismiss(animated: true)
+
+    guard let result = pendingMediaResult else {
+      return
+    }
+
+    let mediaType = pendingMediaType
+    if results.isEmpty {
+      result(nil)
+      clearPendingMediaState()
+      return
+    }
+
+    resolvePickedMediaEntries(results: results, mediaType: mediaType) { [weak self] resolution in
+      defer {
+        self?.clearPendingMediaState()
+      }
+
+      switch resolution {
+      case .success(let entries):
+        result(entries)
+      case .failure(let error):
+        result(FlutterError(code: error.code, message: error.message, details: error.details))
+      }
+    }
   }
 }
 

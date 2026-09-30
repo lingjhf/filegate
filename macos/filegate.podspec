@@ -5,9 +5,9 @@
 Pod::Spec.new do |s|
   s.name             = 'filegate'
   s.version          = '0.0.1'
-  s.summary          = 'A macOS 11+ file chooser plugin with native file streaming.'
+  s.summary          = 'A macOS 12+ file chooser plugin with native file streaming.'
   s.description      = <<-DESC
-A macOS 11+ file chooser plugin with native file streaming.
+A macOS 12+ file chooser plugin with native file streaming.
                        DESC
   s.homepage         = 'http://example.com'
   s.license          = { :file => '../LICENSE' }
@@ -24,7 +24,7 @@ A macOS 11+ file chooser plugin with native file streaming.
 
   s.dependency 'FlutterMacOS'
 
-  s.platform = :osx, '11.0'
+  s.platform = :osx, '12.0'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
   s.swift_version = '5.0'
 end

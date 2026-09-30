@@ -60,6 +60,70 @@ internal class FilegatePluginTest {
     }
 
     @Test
+    fun onMethodCall_pickMediaWithoutActivity_returnsNoActivity() {
+        val plugin = FilegatePlugin()
+
+        val call = MethodCall(
+            "pickMedia",
+            mapOf(
+                "mediaType" to "images",
+                "selectionLimit" to 1
+            )
+        )
+        val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+        plugin.onMethodCall(call, mockResult)
+
+        Mockito.verify(mockResult).error(
+            "no_activity",
+            "Media picker requires a foreground activity.",
+            null
+        )
+    }
+
+    @Test
+    fun onMethodCall_saveToGalleryWithMissingBytes_returnsInvalidArgs() {
+        val plugin = FilegatePlugin()
+
+        val call = MethodCall(
+            "saveToGallery",
+            mapOf(
+                "fileName" to "export.png",
+                "mediaType" to "image"
+            )
+        )
+        val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+        plugin.onMethodCall(call, mockResult)
+
+        Mockito.verify(mockResult).error(
+            "invalid_args",
+            "A non-empty byte payload is required.",
+            null
+        )
+    }
+
+    @Test
+    fun onMethodCall_saveToGalleryWithUnknownMediaType_returnsUnsupportedMode() {
+        val plugin = FilegatePlugin()
+
+        val call = MethodCall(
+            "saveToGallery",
+            mapOf(
+                "bytes" to byteArrayOf(1, 2, 3),
+                "fileName" to "export.txt",
+                "mediaType" to "other"
+            )
+        )
+        val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+        plugin.onMethodCall(call, mockResult)
+
+        Mockito.verify(mockResult).error(
+            "unsupported_mode",
+            "Only image and video files can be saved to the system gallery.",
+            "other"
+        )
+    }
+
+    @Test
     fun onMethodCall_writeWithMissingPath_returnsInvalidArgs() {
         val plugin = FilegatePlugin()
 

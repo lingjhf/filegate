@@ -11,12 +11,14 @@ void main() {
 
   final MethodChannelFilegate platform = MethodChannelFilegate(
     forceNativeRead: true,
+    operatingSystem: 'android',
   );
   final MethodChannelFilegate desktopPlatform = MethodChannelFilegate();
   const MethodChannel channel = MethodChannel('filegate');
   final List<MethodCall> methodCalls = <MethodCall>[];
   Object? pickResponse;
   Object? saveResponse;
+  Object? gallerySaveResponse;
   Object? writeResponse;
   Object? finishWriteResponse;
   String startReadResponse = 'stream-1';
@@ -56,6 +58,12 @@ void main() {
         'mimeType': 'text/plain',
       },
     };
+    gallerySaveResponse = {
+      'identifier': 'content://media/external/images/media/1',
+      'name': 'export.png',
+      'mediaType': 'image',
+      'mimeType': 'image/png',
+    };
     writeResponse = {
       'path': '/tmp/export.txt',
       'name': 'export.txt',
@@ -94,8 +102,16 @@ void main() {
             return pickResponse;
           }
 
+          if (methodCall.method == 'pickMedia') {
+            return pickResponse;
+          }
+
           if (methodCall.method == 'save') {
             return saveResponse;
+          }
+
+          if (methodCall.method == 'saveToGallery') {
+            return gallerySaveResponse;
           }
 
           if (methodCall.method == 'write') {
@@ -261,6 +277,23 @@ void main() {
     ]);
   });
 
+  test('pickMedia invokes media picker channel and decodes entries', () async {
+    final result = await platform.pickMedia(
+      const FilegateMediaPickOptions(
+        mediaType: FilegateMediaType.images,
+        selectionLimit: 9,
+        persistAccess: false,
+      ),
+    );
+
+    expect(result, hasLength(1));
+    expect(result!.single.name, 'example.txt');
+    final call = methodCalls.firstWhere((call) => call.method == 'pickMedia');
+    expect(call.arguments, containsPair('mediaType', 'images'));
+    expect(call.arguments, containsPair('selectionLimit', 9));
+    expect(call.arguments, containsPair('persistAccess', false));
+  });
+
   test('capabilities describe Android SAF limits', () {
     final capabilities = MethodChannelFilegate.capabilitiesForOperatingSystem(
       'android',
@@ -274,6 +307,8 @@ void main() {
     expect(capabilities.supportsFileSaving, isTrue);
     expect(capabilities.supportsFileWriting, isTrue);
     expect(capabilities.supportsFileStreamWriting, isTrue);
+    expect(capabilities.supportsMediaPicking, isTrue);
+    expect(capabilities.supportsGallerySaving, isTrue);
   });
 
   test('capabilities describe Apple mixed picker support', () {
@@ -287,11 +322,15 @@ void main() {
     expect(iosCapabilities.supportsFileSaving, isTrue);
     expect(iosCapabilities.supportsFileWriting, isTrue);
     expect(iosCapabilities.supportsFileStreamWriting, isTrue);
+    expect(iosCapabilities.supportsMediaPicking, isTrue);
+    expect(iosCapabilities.supportsGallerySaving, isTrue);
     expect(macosCapabilities.supportsMixedPicking, isTrue);
     expect(macosCapabilities.supportsNativeUriRead, isFalse);
     expect(macosCapabilities.supportsFileSaving, isTrue);
     expect(macosCapabilities.supportsFileWriting, isTrue);
     expect(macosCapabilities.supportsFileStreamWriting, isTrue);
+    expect(macosCapabilities.supportsMediaPicking, isFalse);
+    expect(macosCapabilities.supportsGallerySaving, isFalse);
   });
 
   test('capabilities describe desktop picker limits', () {
@@ -305,11 +344,15 @@ void main() {
     expect(windowsCapabilities.supportsFileSaving, isTrue);
     expect(windowsCapabilities.supportsFileWriting, isTrue);
     expect(windowsCapabilities.supportsFileStreamWriting, isTrue);
+    expect(windowsCapabilities.supportsMediaPicking, isFalse);
+    expect(windowsCapabilities.supportsGallerySaving, isFalse);
     expect(linuxCapabilities.supportsMixedPicking, isFalse);
     expect(linuxCapabilities.supportsPersistedAccess, isTrue);
     expect(linuxCapabilities.supportsFileSaving, isTrue);
     expect(linuxCapabilities.supportsFileWriting, isTrue);
     expect(linuxCapabilities.supportsFileStreamWriting, isTrue);
+    expect(linuxCapabilities.supportsMediaPicking, isFalse);
+    expect(linuxCapabilities.supportsGallerySaving, isFalse);
   });
 
   test('capabilities are disabled for unknown operating systems', () {
@@ -326,6 +369,8 @@ void main() {
     expect(capabilities.supportsFileSaving, isFalse);
     expect(capabilities.supportsFileWriting, isFalse);
     expect(capabilities.supportsFileStreamWriting, isFalse);
+    expect(capabilities.supportsMediaPicking, isFalse);
+    expect(capabilities.supportsGallerySaving, isFalse);
   });
 
   test('pick rejects invalid native entry payloads', () async {
@@ -376,6 +421,45 @@ void main() {
     );
 
     expect(result, isNull);
+  });
+
+  test('saveToGallery encodes payloads and decodes native result', () async {
+    final result = await platform.saveToGallery(
+      FilegateGallerySaveOptions(
+        bytes: Uint8List.fromList(const [1, 2, 3]),
+        fileName: 'export.png',
+        mediaType: FilegateGalleryMediaType.image,
+        mimeType: 'image/png',
+      ),
+    );
+
+    expect(result.identifier, 'content://media/external/images/media/1');
+    expect(result.name, 'export.png');
+    expect(result.mediaType, FilegateGalleryMediaType.image);
+    expect(result.mimeType, 'image/png');
+
+    final call = methodCalls.firstWhere(
+      (call) => call.method == 'saveToGallery',
+    );
+    expect(call.arguments, containsPair('fileName', 'export.png'));
+    expect(call.arguments, containsPair('mediaType', 'image'));
+    expect(call.arguments, containsPair('mimeType', 'image/png'));
+    expect(call.arguments, contains('bytes'));
+  });
+
+  test('saveToGallery rejects invalid native result payloads', () async {
+    gallerySaveResponse = {'identifier': 'asset-1'};
+
+    expect(
+      () => platform.saveToGallery(
+        FilegateGallerySaveOptions(
+          bytes: Uint8List.fromList(const [1]),
+          fileName: 'export.png',
+          mediaType: FilegateGalleryMediaType.image,
+        ),
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
   });
 
   test('save validates suggestedName before touching the channel', () async {

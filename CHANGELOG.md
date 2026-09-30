@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.9.0 - 2026-07-02
+
+### Added
+
+- Added `saveToGallery` for saving image and video bytes to the system gallery.
+- Added `FilegateGallerySaveResult` and `supportsGallerySaving` capability
+  reporting.
+- Implemented gallery saving on Android with `MediaStore.Images` /
+  `MediaStore.Video` and on iOS with Photos add-only asset creation.
+
+## 1.8.0 - 2026-07-02
+
+### Added
+
+- Added `pickMedia`, `pickImages`, `pickVideos`, and `pickImagesAndVideos`
+  for system photo/video library selection.
+- Implemented media picking on iOS with `PHPickerViewController` and on
+  Android with the system Photo Picker plus a document-picker fallback.
+
+### Changed
+
+- Raised the macOS plugin and example deployment target to macOS 12.0 to match
+  the current Xcode supported deployment target range.
+
 ## 1.7.2 - 2026-07-01
 
 ### Fixed

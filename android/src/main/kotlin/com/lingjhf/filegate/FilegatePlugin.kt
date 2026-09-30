@@ -1,13 +1,18 @@
 package com.lingjhf.filegate
 
+import android.Manifest
 import android.app.Activity
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import androidx.documentfile.provider.DocumentFile
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
@@ -43,6 +48,7 @@ class FilegatePlugin :
     private val readHandlers = mutableMapOf<String, FileReadStreamHandler>()
     private val writeSessions = mutableMapOf<String, FileWriteSession>()
     private var pendingPick: PendingPick? = null
+    private var pendingMediaPick: PendingMediaPick? = null
     private var pendingSave: PendingSave? = null
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
@@ -58,7 +64,9 @@ class FilegatePlugin :
     ) {
         when (call.method) {
             "pick" -> pick(call.arguments as? Map<*, *>, result)
+            "pickMedia" -> pickMedia(call.arguments as? Map<*, *>, result)
             "save" -> save(call.arguments as? Map<*, *>, result)
+            "saveToGallery" -> saveToGallery(call.arguments as? Map<*, *>, result)
             "write" -> write(call.arguments as? Map<*, *>, result)
             "startWrite" -> startWrite(call.arguments as? Map<*, *>, result)
             "writeChunk" -> writeChunk(call.arguments as? Map<*, *>, result)
@@ -73,6 +81,7 @@ class FilegatePlugin :
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         pendingPick = null
+        pendingMediaPick = null
         pendingSave = null
         readHandlers.values.toList().forEach { it.cancel() }
         writeSessions.values.toList().forEach { it.cancel() }
@@ -109,6 +118,9 @@ class FilegatePlugin :
         }
         if (requestCode == requestCodePick) {
             return handlePickActivityResult(resultCode, data)
+        }
+        if (requestCode == requestCodeMediaPick) {
+            return handleMediaActivityResult(resultCode, data)
         }
 
         return false
@@ -152,6 +164,34 @@ class FilegatePlugin :
             pending.result.error("permission_denied", error.localizedMessage, null)
         } catch (error: Exception) {
             pending.result.error("enumeration_failed", error.localizedMessage, null)
+        }
+
+        return true
+    }
+
+    private fun handleMediaActivityResult(resultCode: Int, data: Intent?): Boolean {
+        val pending = pendingMediaPick ?: return false
+        pendingMediaPick = null
+
+        if (resultCode != Activity.RESULT_OK || data == null) {
+            pending.result.success(null)
+            return true
+        }
+
+        try {
+            pending.result.success(
+                handlePickedMedia(
+                    data,
+                    pending.persistAccess,
+                    pending.selectionLimit
+                )
+            )
+        } catch (error: FilegateError) {
+            pending.result.error(error.code, error.message, error.details)
+        } catch (error: SecurityException) {
+            pending.result.error("permission_denied", error.localizedMessage, null)
+        } catch (error: Exception) {
+            pending.result.error("pick_failed", error.localizedMessage, null)
         }
 
         return true
@@ -209,7 +249,7 @@ class FilegatePlugin :
                 return
             }
 
-        if (pendingPick != null || pendingSave != null) {
+        if (pendingPick != null || pendingSave != null || pendingMediaPick != null) {
             result.error("picker_active", "Another file picker request is already active.", null)
             return
         }
@@ -251,6 +291,51 @@ class FilegatePlugin :
         currentActivity.startActivityForResult(intent, requestCodePick)
     }
 
+    private fun pickMedia(arguments: Map<*, *>?, result: Result) {
+        val currentActivity = activity
+            ?: run {
+                result.error("no_activity", "Media picker requires a foreground activity.", null)
+                return
+            }
+
+        if (pendingPick != null || pendingSave != null || pendingMediaPick != null) {
+            result.error("picker_active", "Another picker request is already active.", null)
+            return
+        }
+
+        val mediaType = arguments?.get("mediaType") as? String ?: "imagesAndVideos"
+        if (mediaType != "images" && mediaType != "videos" && mediaType != "imagesAndVideos") {
+            result.error("invalid_args", "Unknown media type: $mediaType.", mediaType)
+            return
+        }
+
+        val selectionLimit = when (val rawLimit = arguments?.get("selectionLimit")) {
+            is Int -> rawLimit
+            is Long -> rawLimit.toInt()
+            else -> 1
+        }
+        if (selectionLimit < 0) {
+            result.error("invalid_args", "selectionLimit must not be negative.", selectionLimit)
+            return
+        }
+
+        val persistAccess = arguments?.get("persistAccess") as? Boolean ?: true
+        val intent = buildMediaPickIntent(mediaType, selectionLimit)
+        pendingMediaPick = PendingMediaPick(
+            result,
+            mediaType,
+            selectionLimit,
+            persistAccess
+        )
+
+        try {
+            currentActivity.startActivityForResult(intent, requestCodeMediaPick)
+        } catch (error: Exception) {
+            pendingMediaPick = null
+            result.error("picker_failed", error.localizedMessage, null)
+        }
+    }
+
     private fun save(arguments: Map<*, *>?, result: Result) {
         val currentActivity = activity
             ?: run {
@@ -258,7 +343,7 @@ class FilegatePlugin :
                 return
             }
 
-        if (pendingPick != null || pendingSave != null) {
+        if (pendingPick != null || pendingSave != null || pendingMediaPick != null) {
             result.error("picker_active", "Another file picker request is already active.", null)
             return
         }
@@ -291,6 +376,35 @@ class FilegatePlugin :
             persistAccess
         )
         currentActivity.startActivityForResult(intent, requestCodeSave)
+    }
+
+    private fun saveToGallery(arguments: Map<*, *>?, result: Result) {
+        val bytes = arguments?.get("bytes") as? ByteArray
+        if (bytes == null || bytes.isEmpty()) {
+            result.error("invalid_args", "A non-empty byte payload is required.", null)
+            return
+        }
+        val fileName = arguments["fileName"] as? String
+        if (fileName.isNullOrBlank() || fileName.contains('/') || fileName.contains('\\')) {
+            result.error("invalid_args", "A non-empty file name is required.", null)
+            return
+        }
+        val mediaType = arguments["mediaType"] as? String
+        if (mediaType != "image" && mediaType != "video") {
+            result.error("unsupported_mode", "Only image and video files can be saved to the system gallery.", mediaType)
+            return
+        }
+
+        try {
+            val mimeType = arguments["mimeType"] as? String
+            result.success(saveGalleryMedia(bytes, fileName, mediaType, mimeType))
+        } catch (error: FilegateError) {
+            result.error(error.code, error.message, error.details)
+        } catch (error: SecurityException) {
+            result.error("permission_denied", error.localizedMessage, null)
+        } catch (error: Exception) {
+            result.error("save_failed", error.localizedMessage, null)
+        }
     }
 
     private fun write(arguments: Map<*, *>?, result: Result) {
@@ -586,6 +700,142 @@ class FilegatePlugin :
         }
     }
 
+    private fun saveGalleryMedia(
+        bytes: ByteArray,
+        fileName: String,
+        mediaType: String,
+        mimeType: String?
+    ): Map<String, Any?> {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            applicationContext.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            throw FilegateError(
+                "permission_denied",
+                "WRITE_EXTERNAL_STORAGE permission is required to save gallery media on this Android version."
+            )
+        }
+
+        val resolver = applicationContext.contentResolver
+        val collection = if (mediaType == "image") {
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        } else {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        }
+        val resolvedMimeType = mimeType?.takeIf { it.isNotBlank() } ?: defaultGalleryMimeType(fileName, mediaType)
+
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, resolvedMimeType)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val directory = if (mediaType == "image") {
+                    Environment.DIRECTORY_PICTURES
+                } else {
+                    Environment.DIRECTORY_MOVIES
+                }
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "$directory/Filegate")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+        }
+
+        val uri = resolver.insert(collection, values)
+            ?: throw FilegateError("save_failed", "Unable to create a gallery media entry.")
+
+        try {
+            resolver.openOutputStream(uri)?.use { outputStream ->
+                outputStream.write(bytes)
+            } ?: throw FilegateError("write_failed", "Unable to open the gallery media entry for writing.", uri.toString())
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val pendingValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.IS_PENDING, 0)
+                }
+                resolver.update(uri, pendingValues, null, null)
+            }
+
+            return serializeGallerySaveResult(uri, fileName, mediaType, resolvedMimeType)
+        } catch (error: Exception) {
+            runCatching { resolver.delete(uri, null, null) }
+            throw error
+        }
+    }
+
+    private fun defaultGalleryMimeType(fileName: String, mediaType: String): String {
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        return when (extension) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "gif" -> "image/gif"
+            "heic" -> "image/heic"
+            "heif" -> "image/heif"
+            "webp" -> "image/webp"
+            "bmp" -> "image/bmp"
+            "mov" -> "video/quicktime"
+            "m4v" -> "video/x-m4v"
+            "webm" -> "video/webm"
+            "3gp", "3gpp" -> "video/3gpp"
+            else -> if (mediaType == "image") "image/jpeg" else "video/mp4"
+        }
+    }
+
+    private fun buildMediaPickIntent(
+        mediaType: String,
+        selectionLimit: Int
+    ): Intent {
+        val mimeType = mimeTypeForMediaType(mediaType)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return Intent(MediaStore.ACTION_PICK_IMAGES).apply {
+                if (!mimeType.isNullOrEmpty()) {
+                    type = mimeType
+                }
+                addFlags(
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                )
+                val resolvedLimit = resolvedPhotoPickerSelectionLimit(selectionLimit)
+                if (resolvedLimit > 1) {
+                    putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX, resolvedLimit)
+                }
+            }
+        }
+
+        return Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            if (mimeType == null) {
+                type = "*/*"
+                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
+            } else {
+                type = mimeType
+            }
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, selectionLimit != 1)
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            )
+        }
+    }
+
+    private fun mimeTypeForMediaType(mediaType: String): String? {
+        return when (mediaType) {
+            "images" -> "image/*"
+            "videos" -> "video/*"
+            else -> null
+        }
+    }
+
+    private fun resolvedPhotoPickerSelectionLimit(selectionLimit: Int): Int {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || selectionLimit == 1) {
+            return selectionLimit
+        }
+
+        val platformLimit = MediaStore.getPickImagesMaxLimit()
+        if (selectionLimit == 0) {
+            return platformLimit
+        }
+        return selectionLimit.coerceAtMost(platformLimit)
+    }
+
     private fun Intent.maybePutInitialUri(initialDirectory: String?) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || initialDirectory.isNullOrEmpty()) {
             return
@@ -601,15 +851,7 @@ class FilegatePlugin :
         allowedExtensions: List<String>,
         persistAccess: Boolean
     ): List<Map<String, Any?>> {
-        val uris = mutableListOf<Uri>()
-        val clipData = data.clipData
-        if (clipData != null) {
-            for (index in 0 until clipData.itemCount) {
-                clipData.getItemAt(index).uri?.let(uris::add)
-            }
-        } else {
-            data.data?.let(uris::add)
-        }
+        val uris = pickedUris(data)
 
         return sortEntries(uris.mapNotNull { uri ->
             if (persistAccess) {
@@ -627,6 +869,45 @@ class FilegatePlugin :
                 )
             }
         })
+    }
+
+    private fun handlePickedMedia(
+        data: Intent,
+        persistAccess: Boolean,
+        selectionLimit: Int
+    ): List<Map<String, Any?>> {
+        val uris = pickedUris(data).distinctBy { it.toString() }
+        val limitedUris = if (selectionLimit > 0) {
+            uris.take(selectionLimit)
+        } else {
+            uris
+        }
+
+        return sortEntries(limitedUris.map { uri ->
+            if (persistAccess) {
+                takePersistablePermission(data, uri)
+            }
+            val document = DocumentFile.fromSingleUri(applicationContext, uri)
+            val name = document?.name ?: queryDisplayName(uri) ?: uri.lastPathSegment ?: uri.toString()
+            serializeFileEntry(
+                uri,
+                name,
+                metadata = metadataForDocument(document, uri)
+            )
+        })
+    }
+
+    private fun pickedUris(data: Intent): List<Uri> {
+        val uris = mutableListOf<Uri>()
+        val clipData = data.clipData
+        if (clipData != null) {
+            for (index in 0 until clipData.itemCount) {
+                clipData.getItemAt(index).uri?.let(uris::add)
+            }
+        } else {
+            data.data?.let(uris::add)
+        }
+        return uris
     }
 
     private fun handlePickedDirectory(
@@ -717,6 +998,20 @@ class FilegatePlugin :
             "kind" to "file",
             "relativePath" to relativePath,
             "metadata" to metadata
+        )
+    }
+
+    private fun serializeGallerySaveResult(
+        uri: Uri,
+        name: String,
+        mediaType: String,
+        mimeType: String?
+    ): Map<String, Any?> {
+        return mapOf(
+            "identifier" to uri.toString(),
+            "name" to name,
+            "mediaType" to mediaType,
+            "mimeType" to mimeType
         )
     }
 
@@ -1068,6 +1363,13 @@ class FilegatePlugin :
         val persistAccess: Boolean
     )
 
+    private data class PendingMediaPick(
+        val result: Result,
+        val mediaType: String,
+        val selectionLimit: Int,
+        val persistAccess: Boolean
+    )
+
     private data class PendingSave(
         val result: Result,
         val bytes: ByteArray,
@@ -1251,6 +1553,7 @@ class FilegatePlugin :
     companion object {
         private const val requestCodePick = 64321
         private const val requestCodeSave = 64322
+        private const val requestCodeMediaPick = 64323
         private const val readChannelPrefix = "filegate/read"
         private const val mixedModeUnsupportedMessage =
             "Android Storage Access Framework does not provide a single system picker intent for mixed file and directory selection. Use ACTION_OPEN_DOCUMENT for files or ACTION_OPEN_DOCUMENT_TREE for directories."

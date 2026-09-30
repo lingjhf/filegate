@@ -2,6 +2,10 @@ import 'dart:typed_data';
 
 enum FilegateSelectionMode { filesOnly, directoriesOnly, filesAndDirectories }
 
+enum FilegateMediaType { images, videos, imagesAndVideos }
+
+enum FilegateGalleryMediaType { image, video }
+
 enum FilegateWriteMode { replace, append }
 
 typedef FilegateWriteProgressCallback =
@@ -63,6 +67,8 @@ class FilegateCapabilities {
     this.supportsFileSaving = false,
     this.supportsFileWriting = false,
     this.supportsFileStreamWriting = false,
+    this.supportsMediaPicking = false,
+    this.supportsGallerySaving = false,
   });
 
   final bool supportsFilePicking;
@@ -74,6 +80,8 @@ class FilegateCapabilities {
   final bool supportsFileSaving;
   final bool supportsFileWriting;
   final bool supportsFileStreamWriting;
+  final bool supportsMediaPicking;
+  final bool supportsGallerySaving;
 
   Map<String, Object?> toMap() {
     return {
@@ -86,6 +94,8 @@ class FilegateCapabilities {
       'supportsFileSaving': supportsFileSaving,
       'supportsFileWriting': supportsFileWriting,
       'supportsFileStreamWriting': supportsFileStreamWriting,
+      'supportsMediaPicking': supportsMediaPicking,
+      'supportsGallerySaving': supportsGallerySaving,
     };
   }
 
@@ -99,6 +109,8 @@ class FilegateCapabilities {
     final supportsFileSaving = map['supportsFileSaving'];
     final supportsFileWriting = map['supportsFileWriting'];
     final supportsFileStreamWriting = map['supportsFileStreamWriting'];
+    final supportsMediaPicking = map['supportsMediaPicking'];
+    final supportsGallerySaving = map['supportsGallerySaving'];
 
     if (supportsFilePicking is! bool ||
         supportsDirectoryPicking is! bool ||
@@ -109,7 +121,9 @@ class FilegateCapabilities {
         (supportsFileSaving != null && supportsFileSaving is! bool) ||
         (supportsFileWriting != null && supportsFileWriting is! bool) ||
         (supportsFileStreamWriting != null &&
-            supportsFileStreamWriting is! bool)) {
+            supportsFileStreamWriting is! bool) ||
+        (supportsMediaPicking != null && supportsMediaPicking is! bool) ||
+        (supportsGallerySaving != null && supportsGallerySaving is! bool)) {
       throw ArgumentError.value(map, 'map', 'Invalid capabilities payload');
     }
 
@@ -123,6 +137,8 @@ class FilegateCapabilities {
       supportsFileSaving: supportsFileSaving as bool? ?? false,
       supportsFileWriting: supportsFileWriting as bool? ?? false,
       supportsFileStreamWriting: supportsFileStreamWriting as bool? ?? false,
+      supportsMediaPicking: supportsMediaPicking as bool? ?? false,
+      supportsGallerySaving: supportsGallerySaving as bool? ?? false,
     );
   }
 }
@@ -169,6 +185,34 @@ class FilegatePickOptions {
   }
 }
 
+class FilegateMediaPickOptions {
+  const FilegateMediaPickOptions({
+    this.mediaType = FilegateMediaType.imagesAndVideos,
+    this.selectionLimit = 1,
+    this.persistAccess = true,
+  });
+
+  final FilegateMediaType mediaType;
+  final int selectionLimit;
+  final bool persistAccess;
+
+  Map<String, Object?> toMap() {
+    if (selectionLimit < 0) {
+      throw ArgumentError.value(
+        selectionLimit,
+        'selectionLimit',
+        'selectionLimit must not be negative',
+      );
+    }
+
+    return {
+      'mediaType': mediaType.name,
+      'selectionLimit': selectionLimit,
+      'persistAccess': persistAccess,
+    };
+  }
+}
+
 class FilegateSaveOptions {
   const FilegateSaveOptions({
     required this.bytes,
@@ -202,6 +246,79 @@ class FilegateSaveOptions {
       'initialDirectory': initialDirectory,
       'mimeType': mimeType,
     };
+  }
+}
+
+class FilegateGallerySaveOptions {
+  const FilegateGallerySaveOptions({
+    required this.bytes,
+    required this.fileName,
+    required this.mediaType,
+    this.mimeType,
+  });
+
+  final Uint8List bytes;
+  final String fileName;
+  final FilegateGalleryMediaType mediaType;
+  final String? mimeType;
+
+  Map<String, Object?> toMap() {
+    return {
+      'bytes': bytes,
+      'fileName': fileName,
+      'mediaType': mediaType.name,
+      'mimeType': mimeType,
+    };
+  }
+}
+
+class FilegateGallerySaveResult {
+  const FilegateGallerySaveResult({
+    required this.identifier,
+    required this.name,
+    required this.mediaType,
+    this.mimeType,
+  });
+
+  final String identifier;
+  final String name;
+  final FilegateGalleryMediaType mediaType;
+  final String? mimeType;
+
+  Map<String, Object?> toMap() {
+    return {
+      'identifier': identifier,
+      'name': name,
+      'mediaType': mediaType.name,
+      'mimeType': mimeType,
+    };
+  }
+
+  factory FilegateGallerySaveResult.fromMap(Map<Object?, Object?> map) {
+    final identifier = map['identifier'];
+    final name = map['name'];
+    final mediaType = map['mediaType'];
+    final mimeType = map['mimeType'];
+
+    if (identifier is! String ||
+        identifier.isEmpty ||
+        name is! String ||
+        name.isEmpty ||
+        mediaType is! String ||
+        (mimeType != null && mimeType is! String)) {
+      throw ArgumentError.value(
+        map,
+        'map',
+        'Invalid gallery save result payload',
+      );
+    }
+
+    return FilegateGallerySaveResult(
+      identifier: identifier,
+      name: name,
+      mediaType: FilegateGalleryMediaType.values.byName(mediaType),
+      mimeType: mimeType as String?,
+    );
   }
 }
 

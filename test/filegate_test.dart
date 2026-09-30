@@ -12,6 +12,8 @@ class MockFilegatePlatform
     with MockPlatformInterfaceMixin
     implements FilegatePlatform {
   FilegatePickOptions? lastOptions;
+  FilegateMediaPickOptions? lastMediaOptions;
+  FilegateGallerySaveOptions? lastGallerySaveOptions;
   FilegateSaveOptions? lastSaveOptions;
   FilegateWriteOptions? lastWriteOptions;
   String? lastOpenWritePath;
@@ -62,6 +64,18 @@ class MockFilegatePlatform
   }
 
   @override
+  Future<List<PickedEntry>?> pickMedia(FilegateMediaPickOptions options) {
+    lastMediaOptions = options;
+    return Future.value(const [
+      PickedEntry(
+        path: '/tmp/media.jpg',
+        name: 'media.jpg',
+        kind: PickedEntryKind.file,
+      ),
+    ]);
+  }
+
+  @override
   Future<PickedEntry?> save(FilegateSaveOptions options) {
     lastSaveOptions = options;
     return Future.value(
@@ -70,6 +84,21 @@ class MockFilegatePlatform
         name: options.suggestedName,
         kind: PickedEntryKind.file,
         metadata: PickedEntryMetadata(size: options.bytes.length),
+      ),
+    );
+  }
+
+  @override
+  Future<FilegateGallerySaveResult> saveToGallery(
+    FilegateGallerySaveOptions options,
+  ) {
+    lastGallerySaveOptions = options;
+    return Future.value(
+      FilegateGallerySaveResult(
+        identifier: 'asset-1',
+        name: options.fileName,
+        mediaType: options.mediaType,
+        mimeType: options.mimeType,
       ),
     );
   }
@@ -531,6 +560,7 @@ void main() {
     expect(capabilities.supportsFileSaving, isTrue);
     expect(capabilities.supportsFileWriting, isTrue);
     expect(capabilities.supportsFileStreamWriting, isTrue);
+    expect(capabilities.supportsMediaPicking, isFalse);
   });
 
   test('capabilities round-trip map payloads', () {
@@ -544,6 +574,8 @@ void main() {
       supportsFileSaving: true,
       supportsFileWriting: true,
       supportsFileStreamWriting: true,
+      supportsMediaPicking: true,
+      supportsGallerySaving: true,
     );
 
     final restored = FilegateCapabilities.fromMap(capabilities.toMap());
@@ -569,6 +601,8 @@ void main() {
       restored.supportsFileStreamWriting,
       capabilities.supportsFileStreamWriting,
     );
+    expect(restored.supportsMediaPicking, capabilities.supportsMediaPicking);
+    expect(restored.supportsGallerySaving, capabilities.supportsGallerySaving);
   });
 
   test(
@@ -586,6 +620,8 @@ void main() {
       expect(restored.supportsFileSaving, isFalse);
       expect(restored.supportsFileWriting, isFalse);
       expect(restored.supportsFileStreamWriting, isFalse);
+      expect(restored.supportsMediaPicking, isFalse);
+      expect(restored.supportsGallerySaving, isFalse);
     },
   );
 
@@ -1027,6 +1063,58 @@ void main() {
     expect(options.toMap()['persistAccess'], false);
   });
 
+  test('media pick options encode channel payloads', () {
+    const options = FilegateMediaPickOptions(
+      mediaType: FilegateMediaType.videos,
+      selectionLimit: 9,
+      persistAccess: false,
+    );
+
+    expect(options.toMap(), const {
+      'mediaType': 'videos',
+      'selectionLimit': 9,
+      'persistAccess': false,
+    });
+  });
+
+  test('media pick options reject negative selection limits', () {
+    expect(
+      () => const FilegateMediaPickOptions(selectionLimit: -1).toMap(),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
+  test('gallery save options encode channel payloads', () {
+    final bytes = Uint8List.fromList(const [1, 2, 3]);
+    final options = FilegateGallerySaveOptions(
+      bytes: bytes,
+      fileName: 'export.mp4',
+      mediaType: FilegateGalleryMediaType.video,
+      mimeType: 'video/mp4',
+    );
+
+    expect(options.toMap(), {
+      'bytes': bytes,
+      'fileName': 'export.mp4',
+      'mediaType': 'video',
+      'mimeType': 'video/mp4',
+    });
+  });
+
+  test('gallery save result decodes native payloads', () {
+    final result = FilegateGallerySaveResult.fromMap(const {
+      'identifier': 'content://media/external/images/media/1',
+      'name': 'export.png',
+      'mediaType': 'image',
+      'mimeType': 'image/png',
+    });
+
+    expect(result.identifier, 'content://media/external/images/media/1');
+    expect(result.name, 'export.png');
+    expect(result.mediaType, FilegateGalleryMediaType.image);
+    expect(result.mimeType, 'image/png');
+  });
+
   test('pickFiles builds file-only options', () async {
     const filegatePlugin = Filegate();
     final fakePlatform = MockFilegatePlatform();
@@ -1084,6 +1172,109 @@ void main() {
     expect(fakePlatform.lastOptions!.allowMultiple, true);
     expect(fakePlatform.lastOptions!.recursive, true);
     expect(fakePlatform.lastOptions!.persistAccess, false);
+  });
+
+  test('pickImages builds image media options', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    FilegatePlatform.instance = fakePlatform;
+
+    await filegatePlugin.pickImages(selectionLimit: 9, persistAccess: false);
+
+    expect(fakePlatform.lastMediaOptions!.mediaType, FilegateMediaType.images);
+    expect(fakePlatform.lastMediaOptions!.selectionLimit, 9);
+    expect(fakePlatform.lastMediaOptions!.persistAccess, false);
+  });
+
+  test('pickVideos builds video media options', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    FilegatePlatform.instance = fakePlatform;
+
+    await filegatePlugin.pickVideos(selectionLimit: 2);
+
+    expect(fakePlatform.lastMediaOptions!.mediaType, FilegateMediaType.videos);
+    expect(fakePlatform.lastMediaOptions!.selectionLimit, 2);
+    expect(fakePlatform.lastMediaOptions!.persistAccess, true);
+  });
+
+  test('pickImagesAndVideos builds combined media options', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    FilegatePlatform.instance = fakePlatform;
+
+    await filegatePlugin.pickImagesAndVideos(selectionLimit: 0);
+
+    expect(
+      fakePlatform.lastMediaOptions!.mediaType,
+      FilegateMediaType.imagesAndVideos,
+    );
+    expect(fakePlatform.lastMediaOptions!.selectionLimit, 0);
+  });
+
+  test('saveToGallery builds image options from MIME type', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    FilegatePlatform.instance = fakePlatform;
+
+    final result = await filegatePlugin.saveToGallery(
+      Uint8List.fromList(const [1, 2, 3]),
+      fileName: 'export.dat',
+      mimeType: 'image/png',
+    );
+
+    expect(result.identifier, 'asset-1');
+    expect(
+      fakePlatform.lastGallerySaveOptions!.mediaType,
+      FilegateGalleryMediaType.image,
+    );
+    expect(fakePlatform.lastGallerySaveOptions!.fileName, 'export.dat');
+    expect(fakePlatform.lastGallerySaveOptions!.mimeType, 'image/png');
+  });
+
+  test('saveToGallery builds video options from extension', () async {
+    const filegatePlugin = Filegate();
+    final fakePlatform = MockFilegatePlatform();
+    FilegatePlatform.instance = fakePlatform;
+
+    await filegatePlugin.saveToGallery(
+      Uint8List.fromList(const [1, 2, 3]),
+      fileName: 'clip.mp4',
+    );
+
+    expect(
+      fakePlatform.lastGallerySaveOptions!.mediaType,
+      FilegateGalleryMediaType.video,
+    );
+  });
+
+  test('saveToGallery rejects invalid gallery payloads', () {
+    const filegatePlugin = Filegate();
+
+    expect(
+      () => filegatePlugin.saveToGallery(Uint8List(0), fileName: 'empty.png'),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => filegatePlugin.saveToGallery(
+        Uint8List.fromList(const [1]),
+        fileName: 'nested/export.png',
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => filegatePlugin.saveToGallery(
+        Uint8List.fromList(const [1]),
+        fileName: 'export.txt',
+      ),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          FilegateErrorCode.unsupportedMode,
+        ),
+      ),
+    );
   });
 
   test('readAllBytes aggregates all chunks', () async {

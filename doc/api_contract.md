@@ -20,6 +20,22 @@ semantics below unless a future changelog calls out a breaking change.
   request persisted Storage Access Framework URI permission when the system
   grants one. Other platforms may ignore the flag.
 
+## Media picking
+
+- `pickMedia()` returns selected photos or videos, or `null` when the system
+  media picker is cancelled.
+- `pickImages()`, `pickVideos()`, and `pickImagesAndVideos()` are convenience
+  wrappers around `pickMedia()`.
+- `FilegateMediaPickOptions.selectionLimit` defaults to `1`. A value of `0`
+  asks the platform for its maximum supported selection count. Negative values
+  are rejected before dispatch.
+- Media picker results are returned as `PickedEntry` values and can be read
+  with the same `openRead()` and `readAllBytes()` APIs as file picker results.
+- iOS uses `PHPickerViewController` on iOS 14 and newer. The native plugin
+  copies picked media into a plugin-managed temporary file before returning.
+- Android uses the system Photo Picker on Android 13 and newer. Older Android
+  versions fall back to `ACTION_OPEN_DOCUMENT` with image/video MIME filters.
+
 ## Entry identity
 
 - `PickedEntry.path` is the stable identifier returned by the platform. It may
@@ -60,6 +76,28 @@ semantics below unless a future changelog calls out a breaking change.
   platform can provide it.
 - Direct save is one-shot and memory-backed. It creates or replaces the target
   chosen by the platform save/export UI.
+
+## Gallery saving
+
+- `saveToGallery(bytes, fileName: name, mimeType: type)` saves image or video
+  bytes directly into the system gallery on Android and iOS.
+- The payload must be non-empty. `fileName` must be a non-empty file name, not a
+  path. Invalid arguments fail before dispatch with `invalid_args` or
+  `ArgumentError` depending on validation layer.
+- Media type detection uses `mimeType` first. `image/*` saves as an image and
+  `video/*` saves as a video. When `mimeType` is omitted, the file extension is
+  used as a fallback. Unrecognized media returns `unsupported_mode`.
+- The returned `FilegateGallerySaveResult.identifier` is the platform asset
+  identifier or media URI. `name`, `mediaType`, and optional `mimeType` echo the
+  saved media metadata.
+- Android writes images through `MediaStore.Images` and videos through
+  `MediaStore.Video`. Android 10 and newer use scoped storage; older Android
+  versions require write access to external storage or return
+  `permission_denied`.
+- iOS uses Photos add-only authorization and `PHPhotoLibrary.performChanges`.
+  Host apps must declare `NSPhotoLibraryAddUsageDescription`.
+- macOS, Windows, Linux, and unsupported media types return
+  `FilegateErrorCode.unsupportedMode`.
 
 ## Writing
 
