@@ -21,7 +21,7 @@ reading for paths available to Dart uses `dart:io`.
 
 ## Feature comparison
 
-Compared with this package (`filegate` 1.9.0) and the latest stable pub.dev
+Compared with this package (`filegate` 1.9.1) and the latest stable pub.dev
 versions checked on 2026-05-18:
 [`file_selector` 1.1.0](https://pub.dev/packages/file_selector) and
 [`file_picker` 11.0.2](https://pub.dev/packages/file_picker).
@@ -78,7 +78,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  filegate: ^1.9.0
+  filegate: ^1.9.1
 ```
 
 If you are using this repository directly:
@@ -94,6 +94,23 @@ Then run:
 ```sh
 flutter pub get
 ```
+
+### Apple dependency management
+
+filegate supports Swift Package Manager on iOS and macOS, including the
+`FlutterFramework` dependency used by current Flutter releases. Flutter 3.44
+and later enable Swift Package Manager by default. If your app has disabled it,
+re-enable it in the app's `pubspec.yaml`:
+
+```yaml
+flutter:
+  config:
+    enable-swift-package-manager: true
+```
+
+The example app uses Swift Package Manager on both Apple platforms and targets
+iOS 15.0 or later with Flutter 3.47.5. The plugin's iOS deployment target remains
+iOS 13.0. CocoaPods podspecs remain available for apps that use CocoaPods.
 
 ## Platform notes
 

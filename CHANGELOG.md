@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.9.1 - 2026-10-02
+
+### Fixed
+
+- Removed stale CocoaPods framework, configuration, and build-phase references
+  from the macOS example so it builds using Swift Package Manager alone.
+- Added Flutter's generated-directory analyzer exclusions to the plugin and
+  example configurations so dependency resolution keeps release validation clean.
+
+### Changed
+
+- Raised the iOS example deployment target to iOS 15.0 as required by
+  Flutter 3.47.5. The plugin's iOS deployment target remains iOS 13.0.
+
+### Documentation
+
+- Documented Swift Package Manager setup and retained CocoaPods compatibility
+  for iOS and macOS.
+
 ## 1.9.0 - 2026-07-02
 
 ### Added
