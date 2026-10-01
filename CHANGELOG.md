@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.10.0 - 2026-10-02
+
+- Added `pickDirectory()` to return selected directory entries, including empty
+  directories, on all five native platforms.
+- Added `enumerateDirectories` and desktop `confirmButtonText` picker options.
+- Replaced deprecated macOS picker filters with `allowedContentTypes` and updated
+  iOS 14+ document pickers and type metadata to modern Uniform Type Identifiers.
+  Existing iOS 13 support and directory-content enumeration remain available.
+
 ## 1.9.1 - 2026-10-02
 
 ### Fixed

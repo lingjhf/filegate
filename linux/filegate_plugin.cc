@@ -286,6 +286,8 @@ FlMethodResponse* filegate_pick_files(FlValue* arguments) {
 
   const bool allow_multiple = lookup_bool(arguments, "allowMultiple", false);
   const bool recursive = lookup_bool(arguments, "recursive", false);
+  const bool enumerate_directories = lookup_bool(arguments, "enumerateDirectories", true);
+  const char* confirm_button_text = lookup_string(arguments, "confirmButtonText");
   const char* title = lookup_string(arguments, "title");
   const char* initial_directory = lookup_string(arguments, "initialDirectory");
   std::vector<std::string> extensions = lookup_extensions(arguments);
@@ -295,7 +297,8 @@ FlMethodResponse* filegate_pick_files(FlValue* arguments) {
                        : GTK_FILE_CHOOSER_ACTION_OPEN;
   GtkFileChooserNative* dialog = gtk_file_chooser_native_new(
       title != nullptr && strlen(title) > 0 ? title : "Choose files", nullptr,
-      action, "_Open", "_Cancel");
+      action, confirm_button_text != nullptr && strlen(confirm_button_text) > 0
+                  ? confirm_button_text : "_Open", "_Cancel");
   GtkFileChooser* chooser = GTK_FILE_CHOOSER(dialog);
   gtk_file_chooser_set_select_multiple(chooser,
                                        directories_only ? FALSE : allow_multiple);
@@ -320,7 +323,14 @@ FlMethodResponse* filegate_pick_files(FlValue* arguments) {
       return FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
     }
     g_autoptr(GError) error = nullptr;
-    if (!append_directory_files(entries, directory_path, "", recursive,
+    if (!enumerate_directories) {
+      g_autoptr(FlValue) entry = fl_value_new_map();
+      g_autofree gchar* name = g_path_get_basename(directory_path);
+      fl_value_set_string_take(entry, "path", fl_value_new_string(directory_path));
+      fl_value_set_string_take(entry, "name", fl_value_new_string(name));
+      fl_value_set_string_take(entry, "kind", fl_value_new_string("directory"));
+      fl_value_append(entries, entry);
+    } else if (!append_directory_files(entries, directory_path, "", recursive,
                                 extensions, &error)) {
       g_object_unref(dialog);
       return FL_METHOD_RESPONSE(fl_method_error_response_new(

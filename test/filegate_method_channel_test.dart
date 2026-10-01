@@ -234,6 +234,30 @@ void main() {
     );
   });
 
+  test('pick transports directory selection and decodes the root', () async {
+    pickResponse = [
+      {'path': 'file:///tmp/empty/', 'name': 'empty', 'kind': 'directory'},
+    ];
+    final result = await platform.pick(
+      const FilegatePickOptions(
+        selectionMode: FilegateSelectionMode.directoriesOnly,
+        enumerateDirectories: false,
+        initialDirectory: '/tmp',
+        confirmButtonText: 'Select',
+      ),
+    );
+    expect(result!.single.isDirectory, true);
+    expect(result.single.fileSystemPath, '/tmp/empty/');
+    expect(
+      methodCalls.single.arguments,
+      containsPair('enumerateDirectories', false),
+    );
+    expect(
+      methodCalls.single.arguments,
+      containsPair('confirmButtonText', 'Select'),
+    );
+  });
+
   test('pick deduplicates entries and sorts them by stable path', () async {
     pickResponse = [
       {

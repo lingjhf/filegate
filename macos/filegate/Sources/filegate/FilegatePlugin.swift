@@ -1,5 +1,5 @@
 import Cocoa
-import CoreServices
+import UniformTypeIdentifiers
 import FlutterMacOS
 
 public class FilegatePlugin: NSObject, FlutterPlugin {
@@ -90,6 +90,8 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
       }
       let allowMultiple = arguments?["allowMultiple"] as? Bool ?? false
       let recursive = arguments?["recursive"] as? Bool ?? false
+      let enumerateDirectories = arguments?["enumerateDirectories"] as? Bool ?? true
+      let confirmButtonText = arguments?["confirmButtonText"] as? String
       let allowedExtensions = arguments?["allowedExtensions"] as? [String] ?? []
       let title = arguments?["title"] as? String
       let initialDirectory = arguments?["initialDirectory"] as? String
@@ -99,6 +101,9 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
       panel.canChooseDirectories = selectionMode != "filesOnly"
       panel.allowsMultipleSelection = allowMultiple
       panel.canCreateDirectories = false
+      if let confirmButtonText, !confirmButtonText.isEmpty {
+        panel.prompt = confirmButtonText
+      }
 
       if let title, !title.isEmpty {
         panel.title = title
@@ -110,7 +115,9 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
 
       let normalizedExtensions = Self.normalizeExtensions(allowedExtensions)
       if !normalizedExtensions.isEmpty, selectionMode != "directoriesOnly" {
-        panel.allowedFileTypes = normalizedExtensions
+        panel.allowedContentTypes = normalizedExtensions.compactMap {
+          UTType(filenameExtension: $0)
+        }
       }
 
       guard panel.runModal() == .OK else {
@@ -123,6 +130,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
           urls: panel.urls,
           selectionMode: selectionMode,
           recursive: recursive,
+          enumerateDirectories: enumerateDirectories,
           allowedExtensions: allowedExtensions
         )
         result(entries)
@@ -164,7 +172,9 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
 
       let normalizedExtensions = Self.normalizeExtensions(allowedExtensions)
       if !normalizedExtensions.isEmpty {
-        panel.allowedFileTypes = normalizedExtensions
+        panel.allowedContentTypes = normalizedExtensions.compactMap {
+          UTType(filenameExtension: $0)
+        }
       }
 
       guard panel.runModal() == .OK, let url = panel.url else {
@@ -417,13 +427,18 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
     urls: [URL],
     selectionMode: String,
     recursive: Bool,
+    enumerateDirectories: Bool,
     allowedExtensions: [String]
   ) throws -> [[String: Any]] {
     var entries: [[String: Any]] = []
     for url in urls {
       let values = try url.resourceValues(forKeys: [.isDirectoryKey])
       if values.isDirectory == true {
-        entries.append(contentsOf: try expandDirectory(at: url, recursive: recursive, allowedExtensions: allowedExtensions))
+        if enumerateDirectories {
+          entries.append(contentsOf: try expandDirectory(at: url, recursive: recursive, allowedExtensions: allowedExtensions))
+        } else {
+          entries.append(Self.serializeEntry(url))
+        }
       } else if Self.matchesAllowedExtensions(url: url, allowedExtensions: allowedExtensions) {
         entries.append(Self.serializeEntry(url))
       }
@@ -556,18 +571,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin {
   }
 
   private static func mimeTypeForFile(_ url: URL) -> String? {
-    let pathExtension = url.pathExtension
-    guard !pathExtension.isEmpty,
-          let unmanagedType = UTTypeCreatePreferredIdentifierForTag(
-            kUTTagClassFilenameExtension,
-            pathExtension as CFString,
-            nil
-          ) else {
-      return nil
-    }
-
-    let type = unmanagedType.takeRetainedValue()
-    return UTTypeCopyPreferredTagWithClass(type, kUTTagClassMIMEType)?.takeRetainedValue() as String?
+    UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
   }
 }
 

@@ -149,7 +149,9 @@ class FilegatePickOptions {
     this.allowMultiple = false,
     this.allowedExtensions = const [],
     this.recursive = false,
+    this.enumerateDirectories = true,
     this.title,
+    this.confirmButtonText,
     this.initialDirectory,
     this.persistAccess = true,
   });
@@ -158,7 +160,15 @@ class FilegatePickOptions {
   final bool allowMultiple;
   final List<String> allowedExtensions;
   final bool recursive;
+
+  /// Whether selected directories are expanded into their contained files.
+  ///
+  /// When `false`, the selected directory entries themselves are returned.
+  final bool enumerateDirectories;
   final String? title;
+
+  /// The confirmation button label on macOS, Windows, and Linux.
+  final String? confirmButtonText;
   final String? initialDirectory;
   final bool persistAccess;
 
@@ -167,6 +177,7 @@ class FilegatePickOptions {
       'selectionMode': selectionMode.name,
       'allowMultiple': allowMultiple,
       'recursive': recursive,
+      'enumerateDirectories': enumerateDirectories,
       'persistAccess': persistAccess,
       'allowedExtensions': allowedExtensions
           .map(_normalizeExtension)
@@ -174,6 +185,7 @@ class FilegatePickOptions {
           .toSet()
           .toList(growable: false),
       'title': title,
+      'confirmButtonText': confirmButtonText,
       'initialDirectory': initialDirectory,
     };
   }

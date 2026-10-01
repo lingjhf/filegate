@@ -21,7 +21,7 @@ reading for paths available to Dart uses `dart:io`.
 
 ## Feature comparison
 
-Compared with this package (`filegate` 1.9.1) and the latest stable pub.dev
+Compared with this package (`filegate` 1.10.0) and the latest stable pub.dev
 versions checked on 2026-05-18:
 [`file_selector` 1.1.0](https://pub.dev/packages/file_selector) and
 [`file_picker` 11.0.2](https://pub.dev/packages/file_picker).
@@ -78,7 +78,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  filegate: ^1.9.1
+  filegate: ^1.10.0
 ```
 
 If you are using this repository directly:
@@ -206,6 +206,22 @@ if (photos != null) {
   }
 }
 ```
+
+### Pick a directory itself
+
+```dart
+final directory = await filegate.pickDirectory(
+  initialDirectory: '/path/to/projects',
+  confirmButtonText: 'Select',
+);
+
+// Empty directories are valid selections. Cancellation returns null.
+print(directory?.fileSystemPath);
+```
+
+On Android, the selected directory is a document tree URI in `directory.path`;
+`fileSystemPath` is null for content URIs. The confirmation button label is
+supported on macOS, Windows, and Linux.
 
 ### Pick files from a directory
 
@@ -353,6 +369,7 @@ Methods:
 - `pickFiles(...)`: Picks one or more files.
 - `pickImages(...)`, `pickVideos(...)`, `pickImagesAndVideos(...)`: Picks media
   from the system photo/video library where supported.
+- `pickDirectory(...)`: Picks a directory itself, including an empty directory.
 - `pickDirectoryFiles(...)`: Picks a directory and returns matching files.
 - `pickMixed(...)`: Picks files and directories where supported.
 - `saveFile(...)`: Saves an in-memory byte payload through a native save/export

@@ -145,6 +145,7 @@ class FilegatePlugin :
                 "directoriesOnly" -> handlePickedDirectory(
                     data,
                     pending.recursive,
+                    pending.enumerateDirectories,
                     pending.allowedExtensions,
                     pending.persistAccess
                 )
@@ -266,6 +267,7 @@ class FilegatePlugin :
 
         val allowMultiple = arguments?.get("allowMultiple") as? Boolean ?: false
         val recursive = arguments?.get("recursive") as? Boolean ?: false
+        val enumerateDirectories = arguments?.get("enumerateDirectories") as? Boolean ?: true
         val allowedExtensions = (arguments?.get("allowedExtensions") as? List<*>)
             ?.mapNotNull { it as? String }
             ?: emptyList()
@@ -285,6 +287,7 @@ class FilegatePlugin :
             result,
             selectionMode,
             recursive,
+            enumerateDirectories,
             allowedExtensions,
             persistAccess
         )
@@ -913,6 +916,7 @@ class FilegatePlugin :
     private fun handlePickedDirectory(
         data: Intent,
         recursive: Boolean,
+        enumerateDirectories: Boolean,
         allowedExtensions: List<String>,
         persistAccess: Boolean
     ): List<Map<String, Any?>> {
@@ -927,6 +931,14 @@ class FilegatePlugin :
 
         if (!root.isDirectory) {
             throw FilegateError("not_a_directory", "The selected item is not a directory.", treeUri.toString())
+        }
+
+        if (!enumerateDirectories) {
+            return listOf(mapOf(
+                "path" to treeUri.toString(),
+                "name" to (root.name ?: treeUri.lastPathSegment ?: treeUri.toString()),
+                "kind" to "directory"
+            ))
         }
 
         val entries = mutableListOf<Map<String, Any?>>()
@@ -1359,6 +1371,7 @@ class FilegatePlugin :
         val result: Result,
         val selectionMode: String,
         val recursive: Boolean,
+        val enumerateDirectories: Boolean,
         val allowedExtensions: List<String>,
         val persistAccess: Boolean
     )

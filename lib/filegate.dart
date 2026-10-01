@@ -147,6 +147,36 @@ class Filegate {
     );
   }
 
+  /// Selects a directory itself, including an empty directory.
+  ///
+  /// Returns `null` when cancelled. On Android the entry identifies a document
+  /// tree URI; [PickedEntry.fileSystemPath] is available for local paths.
+  Future<PickedEntry?> pickDirectory({
+    String? title,
+    String? initialDirectory,
+    String? confirmButtonText,
+    bool persistAccess = true,
+  }) async {
+    final entries = await pick(
+      FilegatePickOptions(
+        selectionMode: FilegateSelectionMode.directoriesOnly,
+        enumerateDirectories: false,
+        title: title,
+        initialDirectory: initialDirectory,
+        confirmButtonText: confirmButtonText,
+        persistAccess: persistAccess,
+      ),
+    );
+    if (entries == null) return null;
+    if (entries.length != 1 || !entries.single.isDirectory) {
+      throw PlatformException(
+        code: 'invalid_response',
+        message: 'Expected a single directory entry.',
+      );
+    }
+    return entries.single;
+  }
+
   Future<List<PickedEntry>?> pickDirectoryFiles({
     bool recursive = false,
     List<String> allowedExtensions = const [],

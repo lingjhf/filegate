@@ -800,6 +800,13 @@ void FilegatePlugin::Pick(
     dialog->SetTitle(title_wide.c_str());
   }
 
+  const std::string* confirm_button_text = LookupString(map, "confirmButtonText");
+  std::wstring confirm_button_text_wide;
+  if (confirm_button_text != nullptr && !confirm_button_text->empty()) {
+    confirm_button_text_wide = Utf8ToWide(*confirm_button_text);
+    dialog->SetOkButtonLabel(confirm_button_text_wide.c_str());
+  }
+
   const std::string* initial_directory = LookupString(map, "initialDirectory");
   ComPtr<IShellItem> initial_folder;
   std::wstring initial_directory_wide;
@@ -848,9 +855,16 @@ void FilegatePlugin::Pick(
         if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &raw_path))) {
           fs::path directory = fs::path(raw_path);
           CoTaskMemFree(raw_path);
-          AppendDirectoryFiles(&entries, directory,
-                               LookupBool(map, "recursive", false),
-                               extensions);
+          if (LookupBool(map, "enumerateDirectories", true)) {
+            AppendDirectoryFiles(&entries, directory,
+                                 LookupBool(map, "recursive", false), extensions);
+          } else {
+            entries.push_back(EncodableValue(EncodableMap{
+                {EncodableValue("path"), EncodableValue(directory.u8string())},
+                {EncodableValue("name"), EncodableValue(directory.filename().u8string())},
+                {EncodableValue("kind"), EncodableValue("directory")},
+            }));
+          }
         }
       }
     } else {

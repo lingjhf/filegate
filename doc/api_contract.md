@@ -7,6 +7,12 @@ semantics below unless a future changelog calls out a breaking change.
 ## Picking
 
 - `pickFiles()` returns selected files or `null` when the picker is cancelled.
+- `pickDirectory()` returns the selected directory entry, including empty
+  directories, or `null` when cancelled. Android returns a document tree URI.
+- `FilegatePickOptions.enumerateDirectories` defaults to `true`; setting it to
+  `false` returns selected directory entries instead of enumerating their contents.
+- `FilegatePickOptions.confirmButtonText` sets the confirmation button label on
+  macOS, Windows, and Linux. Other platforms use the native system label.
 - `pickDirectoryFiles()` returns files found inside the selected directory.
   Returned entries should include `relativePath` when the platform can provide
   a stable path relative to the selected root, without prefixing the selected

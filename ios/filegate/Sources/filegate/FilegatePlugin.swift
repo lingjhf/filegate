@@ -3,6 +3,7 @@ import MobileCoreServices
 import Photos
 import PhotosUI
 import UIKit
+import UniformTypeIdentifiers
 
 public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   private let messenger: FlutterBinaryMessenger
@@ -15,6 +16,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   private var pendingSaveTemporaryDirectoryURL: URL?
   private var pendingSelectionMode = "filesOnly"
   private var pendingPickRecursive = false
+  private var pendingEnumerateDirectories = true
   private var pendingAllowedExtensions: [String] = []
   private var pendingMediaResult: FlutterResult?
   private var pendingMediaType = "imagesAndVideos"
@@ -125,16 +127,23 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     }
     let allowMultiple = arguments?["allowMultiple"] as? Bool ?? false
     let recursive = arguments?["recursive"] as? Bool ?? false
+    let enumerateDirectories = arguments?["enumerateDirectories"] as? Bool ?? true
     let allowedExtensions = arguments?["allowedExtensions"] as? [String] ?? []
     let title = arguments?["title"] as? String
     let initialDirectory = arguments?["initialDirectory"] as? String
 
-    let documentTypes = buildDocumentTypes(
-      selectionMode: selectionMode,
-      allowedExtensions: allowedExtensions
-    )
-
-    let picker = UIDocumentPickerViewController(documentTypes: documentTypes, in: .open)
+    let picker: UIDocumentPickerViewController
+    if #available(iOS 14.0, *) {
+      picker = UIDocumentPickerViewController(
+        forOpeningContentTypes: buildContentTypes(selectionMode: selectionMode, allowedExtensions: allowedExtensions),
+        asCopy: false
+      )
+    } else {
+      picker = UIDocumentPickerViewController(
+        documentTypes: buildDocumentTypes(selectionMode: selectionMode, allowedExtensions: allowedExtensions),
+        in: .open
+      )
+    }
     picker.delegate = self
     picker.allowsMultipleSelection = allowMultiple
     if let title, !title.isEmpty {
@@ -147,6 +156,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     pendingPickResult = result
     pendingSelectionMode = selectionMode
     pendingPickRecursive = recursive
+    pendingEnumerateDirectories = enumerateDirectories
     pendingAllowedExtensions = allowedExtensions
 
     presenter.present(picker, animated: true)
@@ -237,7 +247,12 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       return
     }
 
-    let picker = UIDocumentPickerViewController(url: temporaryFile, in: .exportToService)
+    let picker: UIDocumentPickerViewController
+    if #available(iOS 14.0, *) {
+      picker = UIDocumentPickerViewController(forExporting: [temporaryFile], asCopy: true)
+    } else {
+      picker = UIDocumentPickerViewController(url: temporaryFile, in: .exportToService)
+    }
     picker.delegate = self
     if let title, !title.isEmpty {
       picker.title = title
@@ -559,6 +574,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     let result = pendingPickResult
     let selectionMode = pendingSelectionMode
     let recursive = pendingPickRecursive
+    let enumerateDirectories = pendingEnumerateDirectories
     let allowedExtensions = pendingAllowedExtensions
     clearPendingPickState()
 
@@ -571,6 +587,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
         urls: urls,
         selectionMode: selectionMode,
         recursive: recursive,
+        enumerateDirectories: enumerateDirectories,
         allowedExtensions: allowedExtensions
       )
       result(entries)
@@ -596,6 +613,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     pendingPickResult = nil
     pendingSelectionMode = "filesOnly"
     pendingPickRecursive = false
+    pendingEnumerateDirectories = true
     pendingAllowedExtensions = []
   }
 
@@ -796,19 +814,21 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     let preferredIdentifier = identifiers.first { identifier in
       switch mediaType {
       case "images":
-        return isTypeIdentifier(identifier, conformingTo: kUTTypeImage as String)
+        return isTypeIdentifier(identifier, conformingTo: UTType.image.identifier)
       case "videos":
-        return isTypeIdentifier(identifier, conformingTo: kUTTypeMovie as String)
+        return isTypeIdentifier(identifier, conformingTo: UTType.movie.identifier)
       default:
-        return isTypeIdentifier(identifier, conformingTo: kUTTypeImage as String) ||
-          isTypeIdentifier(identifier, conformingTo: kUTTypeMovie as String)
+        return isTypeIdentifier(identifier, conformingTo: UTType.image.identifier) ||
+          isTypeIdentifier(identifier, conformingTo: UTType.movie.identifier)
       }
     }
     return preferredIdentifier ?? identifiers.first
   }
 
+  @available(iOS 14.0, *)
   private func isTypeIdentifier(_ identifier: String, conformingTo parentIdentifier: String) -> Bool {
-    UTTypeConformsTo(identifier as CFString, parentIdentifier as CFString)
+    guard let type = UTType(identifier), let parent = UTType(parentIdentifier) else { return false }
+    return type.conforms(to: parent)
   }
 
   @available(iOS 14.0, *)
@@ -870,6 +890,15 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   }
 
   private func preferredFilenameExtension(for typeIdentifier: String) -> String? {
+    if #available(iOS 14.0, *) {
+      return UTType(typeIdentifier)?.preferredFilenameExtension
+    } else {
+      return legacyFilenameExtension(for: typeIdentifier)
+    }
+  }
+
+  @available(iOS, deprecated: 14.0)
+  private func legacyFilenameExtension(for typeIdentifier: String) -> String? {
     UTTypeCopyPreferredTagWithClass(
       typeIdentifier as CFString,
       kUTTagClassFilenameExtension
@@ -880,12 +909,13 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     urls: [URL],
     selectionMode: String,
     recursive: Bool,
+    enumerateDirectories: Bool,
     allowedExtensions: [String]
   ) throws -> [[String: Any]] {
     var entriesByPath: [String: [String: Any]] = [:]
 
     for url in urls {
-      let values = try url.resourceValues(forKeys: [.isDirectoryKey])
+      let values = try url.resourceValues(forKeys: [.isDirectoryKey, .nameKey])
       if values.isDirectory == true {
         let scopeActive = url.startAccessingSecurityScopedResource()
         guard scopeActive || FileManager.default.isReadableFile(atPath: url.path) else {
@@ -895,6 +925,15 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
           if scopeActive {
             url.stopAccessingSecurityScopedResource()
           }
+        }
+
+        if !enumerateDirectories {
+          entriesByPath[url.absoluteString] = [
+            "path": url.absoluteString,
+            "name": values.name ?? url.lastPathComponent,
+            "kind": "directory",
+          ]
+          continue
         }
 
         for entry in try expandDirectory(at: url, recursive: recursive, allowedExtensions: allowedExtensions) {
@@ -993,6 +1032,22 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     ]
   }
 
+  @available(iOS 14.0, *)
+  private func buildContentTypes(selectionMode: String, allowedExtensions: [String]) -> [UTType] {
+    let extensions = normalizeExtensions(allowedExtensions)
+    let mapped = extensions.compactMap { UTType(filenameExtension: $0) }
+    let fileTypes: [UTType] = mapped.isEmpty ? [.data] : mapped
+    switch selectionMode {
+    case "directoriesOnly":
+      return [.folder]
+    case "filesAndDirectories":
+      return fileTypes + [.folder]
+    default:
+      return fileTypes
+    }
+  }
+
+  @available(iOS, deprecated: 14.0)
   private func buildDocumentTypes(selectionMode: String, allowedExtensions: [String]) -> [String] {
     let normalizedExtensions = normalizeExtensions(allowedExtensions)
     let fileTypes: [String]
@@ -1065,6 +1120,15 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   }
 
   private func mimeTypeForFile(_ url: URL) -> String? {
+    if #available(iOS 14.0, *) {
+      return UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
+    } else {
+      return legacyMimeTypeForFile(url)
+    }
+  }
+
+  @available(iOS, deprecated: 14.0)
+  private func legacyMimeTypeForFile(_ url: URL) -> String? {
     let pathExtension = url.pathExtension
     guard !pathExtension.isEmpty,
           let unmanagedType = UTTypeCreatePreferredIdentifierForTag(

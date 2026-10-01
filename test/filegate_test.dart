@@ -12,6 +12,13 @@ class MockFilegatePlatform
     with MockPlatformInterfaceMixin
     implements FilegatePlatform {
   FilegatePickOptions? lastOptions;
+  List<PickedEntry>? pickedEntries = const [
+    PickedEntry(
+      path: '/tmp/example.txt',
+      name: 'example.txt',
+      kind: PickedEntryKind.file,
+    ),
+  ];
   FilegateMediaPickOptions? lastMediaOptions;
   FilegateGallerySaveOptions? lastGallerySaveOptions;
   FilegateSaveOptions? lastSaveOptions;
@@ -54,13 +61,7 @@ class MockFilegatePlatform
   @override
   Future<List<PickedEntry>?> pick(FilegatePickOptions options) {
     lastOptions = options;
-    return Future.value(const [
-      PickedEntry(
-        path: '/tmp/example.txt',
-        name: 'example.txt',
-        kind: PickedEntryKind.file,
-      ),
-    ]);
+    return Future.value(pickedEntries);
   }
 
   @override
@@ -1136,6 +1137,82 @@ void main() {
     expect(fakePlatform.lastOptions!.persistAccess, false);
   });
 
+  group('pickDirectory', () {
+    test(
+      'returns the selected root without enumerating an empty directory',
+      () async {
+        final platform = MockFilegatePlatform()
+          ..pickedEntries = const [
+            PickedEntry(
+              path: '/tmp/empty',
+              name: 'empty',
+              kind: PickedEntryKind.directory,
+            ),
+          ];
+        FilegatePlatform.instance = platform;
+
+        final entry = await const Filegate().pickDirectory(
+          initialDirectory: '/tmp',
+          title: 'Choose directory',
+          confirmButtonText: 'Select',
+          persistAccess: false,
+        );
+
+        expect(entry!.fileSystemPath, '/tmp/empty');
+        expect(
+          platform.lastOptions!.selectionMode,
+          FilegateSelectionMode.directoriesOnly,
+        );
+        expect(platform.lastOptions!.enumerateDirectories, isFalse);
+        expect(platform.lastOptions!.allowMultiple, isFalse);
+        expect(platform.lastOptions!.initialDirectory, '/tmp');
+        expect(platform.lastOptions!.confirmButtonText, 'Select');
+        expect(platform.lastOptions!.persistAccess, isFalse);
+      },
+    );
+
+    test('returns null when cancelled', () async {
+      FilegatePlatform.instance = MockFilegatePlatform()..pickedEntries = null;
+      expect(await const Filegate().pickDirectory(), isNull);
+    });
+
+    test('preserves Android document tree identifiers', () async {
+      FilegatePlatform.instance = MockFilegatePlatform()
+        ..pickedEntries = const [
+          PickedEntry(
+            path: 'content://provider/tree/root',
+            name: 'root',
+            kind: PickedEntryKind.directory,
+          ),
+        ];
+      final entry = await const Filegate().pickDirectory();
+      expect(entry!.path, 'content://provider/tree/root');
+      expect(entry.fileSystemPath, isNull);
+    });
+
+    test(
+      'rejects a file response instead of treating it as a directory',
+      () async {
+        FilegatePlatform.instance = MockFilegatePlatform();
+        await expectLater(
+          const Filegate().pickDirectory(),
+          throwsA(isA<PlatformException>()),
+        );
+      },
+    );
+
+    test(
+      'rejects an empty list instead of treating selection as cancellation',
+      () async {
+        FilegatePlatform.instance = MockFilegatePlatform()..pickedEntries = [];
+        await expectLater(
+          const Filegate().pickDirectory(),
+          throwsA(isA<PlatformException>()),
+        );
+      },
+    );
+  });
+
   test('pickDirectoryFiles builds directory-only options', () async {
     const filegatePlugin = Filegate();
     final fakePlatform = MockFilegatePlatform();
@@ -1151,6 +1228,7 @@ void main() {
       FilegateSelectionMode.directoriesOnly,
     );
     expect(fakePlatform.lastOptions!.recursive, true);
+    expect(fakePlatform.lastOptions!.enumerateDirectories, true);
     expect(fakePlatform.lastOptions!.persistAccess, false);
   });
 
