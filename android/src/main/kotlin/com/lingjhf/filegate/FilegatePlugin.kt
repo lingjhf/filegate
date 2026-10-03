@@ -31,6 +31,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
 import java.util.concurrent.Executors
+import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.AtomicBoolean
 
 class FilegatePlugin :
@@ -74,6 +75,7 @@ class FilegatePlugin :
             "cancelWrite" -> cancelWrite(call.arguments as? Map<*, *>, result)
             "getFileSize" -> getFileSize(call.arguments as? Map<*, *>, result)
             "startRead" -> startRead(call.arguments as? Map<*, *>, result)
+            "ackRead" -> acknowledgeRead(call.arguments as? Map<*, *>, result)
             "cancelRead" -> cancelRead(call.arguments as? Map<*, *>, result)
             else -> result.notImplemented()
         }
@@ -496,6 +498,7 @@ class FilegatePlugin :
                 openStream = { openInputStream(path, start) },
                 chunkSize = chunkSize,
                 maxBytes = end?.minus(start),
+                flowControlled = arguments["flowControlled"] == true,
                 dispatchEvent = { action -> runOnMainThread(action) },
                 onDispose = { runOnMainThread { releaseReadStream(streamId) } }
             )
@@ -631,6 +634,16 @@ class FilegatePlugin :
         } catch (error: Exception) {
             result.error("read_failed", error.localizedMessage, path)
         }
+    }
+
+    private fun acknowledgeRead(arguments: Map<*, *>?, result: Result) {
+        val streamId = arguments?.get("streamId") as? String
+        if (streamId.isNullOrEmpty()) {
+            result.error("invalid_args", "A non-empty streamId is required.", null)
+            return
+        }
+        readHandlers[streamId]?.acknowledge()
+        result.success(null)
     }
 
     private fun cancelRead(arguments: Map<*, *>?, result: Result) {
@@ -1424,10 +1437,12 @@ class FilegatePlugin :
         private val openStream: () -> InputStream,
         private val chunkSize: Int,
         private val maxBytes: Long?,
+        private val flowControlled: Boolean = false,
         private val dispatchEvent: (() -> Unit) -> Unit,
         private val onDispose: () -> Unit
     ) : EventChannel.StreamHandler {
         private val executor = Executors.newSingleThreadExecutor()
+        private val readPermit = Semaphore(1)
         private val isDisposed = AtomicBoolean(false)
         @Volatile private var isCancelled = false
         @Volatile private var eventSink: EventChannel.EventSink? = null
@@ -1472,8 +1487,15 @@ class FilegatePlugin :
             cancel()
         }
 
+        fun acknowledge() {
+            if (flowControlled && readPermit.availablePermits() == 0) {
+                readPermit.release()
+            }
+        }
+
         fun cancel() {
             isCancelled = true
+            readPermit.release()
             runCatching { inputStream?.close() }
             inputStream = null
             eventSink = null
@@ -1495,6 +1517,8 @@ class FilegatePlugin :
                         return
                     }
 
+                    if (flowControlled) readPermit.acquire()
+                    if (isCancelled) return
                     val currentChunkSize = if (remainingBytes != null && remainingBytes < chunkSize) {
                         remainingBytes.toInt()
                     } else {
@@ -1507,12 +1531,15 @@ class FilegatePlugin :
                             sendEndOfStream()
                             return
                         }
-                        read == 0 -> continue
+                        read == 0 -> {
+                            if (flowControlled) readPermit.release()
+                            continue
+                        }
                         else -> {
                             if (remainingBytes != null) {
                                 remainingBytes -= read.toLong()
                             }
-                            sendSuccess(buffer.copyOf(read))
+                            sendSuccess(if (read == buffer.size) buffer else buffer.copyOf(read))
                         }
                     }
                 }

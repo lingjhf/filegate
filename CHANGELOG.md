@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Bound read buffering for paused and slow consumers on desktop, Android, iOS,
+  and native macOS reads; remove redundant desktop and Android chunk copies.
+- Fix read cancellation during pending file operations and while paused, and
+  serialize write cancellation with active writes and finish operations.
+- Support desktop `file:` URI reads and share read argument validation across
+  public and method-channel entry points.
+- Share extension normalization across picking, saving, and directory listing;
+  use asynchronous directory validation and standard relative path handling.
+- Keep native macOS read channels registered until Flutter cancels them at EOF.
+
 ## 1.10.0 - 2026-10-02
 
 - Added `pickDirectory()` to return selected directory entries, including empty

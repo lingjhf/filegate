@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'extensions.dart';
+
 enum FilegateSelectionMode { filesOnly, directoriesOnly, filesAndDirectories }
 
 enum FilegateMediaType { images, videos, imagesAndVideos }
@@ -179,21 +181,13 @@ class FilegatePickOptions {
       'recursive': recursive,
       'enumerateDirectories': enumerateDirectories,
       'persistAccess': persistAccess,
-      'allowedExtensions': allowedExtensions
-          .map(_normalizeExtension)
-          .where((extension) => extension.isNotEmpty)
-          .toSet()
-          .toList(growable: false),
+      'allowedExtensions': normalizeExtensions(
+        allowedExtensions,
+      ).toList(growable: false),
       'title': title,
       'confirmButtonText': confirmButtonText,
       'initialDirectory': initialDirectory,
     };
-  }
-
-  static String _normalizeExtension(String extension) {
-    final trimmed = extension.trim();
-    final withoutDots = trimmed.replaceFirst(RegExp(r'^\.+'), '');
-    return withoutDots.toLowerCase();
   }
 }
 
@@ -249,11 +243,9 @@ class FilegateSaveOptions {
       'bytes': bytes,
       'suggestedName': suggestedName,
       'persistAccess': persistAccess,
-      'allowedExtensions': allowedExtensions
-          .map(FilegatePickOptions._normalizeExtension)
-          .where((extension) => extension.isNotEmpty)
-          .toSet()
-          .toList(growable: false),
+      'allowedExtensions': normalizeExtensions(
+        allowedExtensions,
+      ).toList(growable: false),
       'title': title,
       'initialDirectory': initialDirectory,
       'mimeType': mimeType,

@@ -79,6 +79,15 @@ class FileWriteSession {
       return Future<void>.value();
     }
     _cancelRequested = true;
-    return _cancelFuture ??= _onCancel();
+    return _cancelFuture ??= () async {
+      // Native resources belong to the active write/finish operation until it
+      // settles. Cleanup must still run if a queued operation failed.
+      try {
+        await (_closeFuture ?? _tail);
+      } on Object {
+        // The original operation's Future preserves its error for the caller.
+      }
+      if (!_closed) await _onCancel();
+    }();
   }
 }

@@ -8,7 +8,9 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import org.mockito.Mockito
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -517,6 +519,75 @@ internal class FilegatePluginTest {
 
         assertTrue(sink.awaitEnd())
         assertEquals(listOf(listOf(1, 2, 3), listOf(4)), sink.successEvents)
+    }
+
+    @Test
+    fun fileReadStreamHandler_boundsReadAheadUntilConsumerAcknowledges() {
+        val reads = AtomicInteger()
+        val events = LinkedBlockingQueue<() -> Unit>()
+        val stopped = CountDownLatch(1)
+        val handler = FilegatePlugin.FileReadStreamHandler(
+            openStream = {
+                object : ByteArrayInputStream(ByteArray(100)) {
+                    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                        reads.incrementAndGet()
+                        return super.read(buffer, offset, length)
+                    }
+                    override fun close() { stopped.countDown() }
+                }
+            },
+            chunkSize = 1,
+            maxBytes = null,
+            flowControlled = true,
+            dispatchEvent = { action -> events.put(action) },
+            onDispose = { }
+        )
+        try {
+            handler.onListen(null, RecordingEventSink())
+            val first = events.poll(1, TimeUnit.SECONDS)
+            assertTrue(first != null)
+            first!!.invoke()
+            assertEquals(null, events.poll(30, TimeUnit.MILLISECONDS))
+            assertEquals(1, reads.get())
+            handler.acknowledge()
+            val second = events.poll(1, TimeUnit.SECONDS)
+            assertTrue(second != null)
+            second!!.invoke()
+            assertEquals(2, reads.get())
+        } finally {
+            handler.cancel()
+        }
+        assertTrue(stopped.await(1, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun fileReadStreamHandler_flowControlKeepsRangeAndEofSemantics() {
+        val events = LinkedBlockingQueue<() -> Unit>()
+        val handler = FilegatePlugin.FileReadStreamHandler(
+            openStream = { ByteArrayInputStream(byteArrayOf(1, 2, 3, 4, 5)) },
+            chunkSize = 3,
+            maxBytes = 4,
+            flowControlled = true,
+            dispatchEvent = { action -> events.put(action) },
+            onDispose = { }
+        )
+        val sink = RecordingEventSink()
+        try {
+            handler.onListen(null, sink)
+            repeat(2) {
+                val event = events.poll(1, TimeUnit.SECONDS)
+                assertTrue(event != null)
+                event!!.invoke()
+                handler.acknowledge()
+            }
+            val end = events.poll(1, TimeUnit.SECONDS)
+            assertTrue(end != null)
+            end!!.invoke()
+            assertTrue(sink.awaitEnd())
+            assertEquals(listOf(listOf(1, 2, 3), listOf(4)), sink.successEvents)
+        } finally {
+            handler.cancel()
+        }
     }
 
     private fun startWrite(plugin: FilegatePlugin, file: File, mode: String): String {

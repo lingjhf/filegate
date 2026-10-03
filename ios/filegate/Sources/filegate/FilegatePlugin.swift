@@ -60,6 +60,8 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       getFileSize(arguments: call.arguments as? [String: Any], result: result)
     case "startRead":
       startRead(arguments: call.arguments as? [String: Any], result: result)
+    case "ackRead":
+      acknowledgeRead(arguments: call.arguments as? [String: Any], result: result)
     case "cancelRead":
       cancelRead(arguments: call.arguments as? [String: Any], result: result)
     default:
@@ -438,6 +440,7 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       errorDetails: path,
       chunkSize: chunkSize,
       maxBytes: end.map { $0 - start },
+      flowControlled: arguments?["flowControlled"] as? Bool ?? false,
       onDispose: { [weak self] in
         if temporaryAccess {
           fileURL.stopAccessingSecurityScopedResource()
@@ -552,6 +555,15 @@ public class FilegatePlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     }
 
     writeSessions.removeValue(forKey: sessionId)?.cancel()
+    result(nil)
+  }
+
+  private func acknowledgeRead(arguments: [String: Any]?, result: @escaping FlutterResult) {
+    guard let streamId = arguments?["streamId"] as? String, !streamId.isEmpty else {
+      result(FlutterError(code: "invalid_args", message: "A non-empty streamId is required.", details: nil))
+      return
+    }
+    readHandlers[streamId]?.acknowledge()
     result(nil)
   }
 
@@ -1212,7 +1224,9 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
   private let chunkSize: Int
   private let maxBytes: Int?
   private let queue = DispatchQueue(label: "filegate.ios.read", qos: .utility)
-  private let lock = NSLock()
+  private let lock = NSCondition()
+  private let flowControlled: Bool
+  private var readCredit = true
   private let onDispose: () -> Void
 
   private var fileHandle: FileHandle?
@@ -1225,12 +1239,14 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
     errorDetails: String,
     chunkSize: Int,
     maxBytes: Int?,
+    flowControlled: Bool = false,
     onDispose: @escaping () -> Void
   ) {
     self.handleFactory = handleFactory
     self.errorDetails = errorDetails
     self.chunkSize = chunkSize
     self.maxBytes = maxBytes
+    self.flowControlled = flowControlled
     self.onDispose = onDispose
     super.init()
   }
@@ -1267,9 +1283,28 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
     return nil
   }
 
+  func acknowledge() {
+    withLock {
+      readCredit = true
+      lock.signal()
+    }
+  }
+
+  private func waitForReadCredit() -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    while flowControlled && !readCredit && !isCancelled {
+      lock.wait()
+    }
+    if isCancelled { return false }
+    readCredit = false
+    return true
+  }
+
   func cancel() {
     let handle = withLock { () -> FileHandle? in
       isCancelled = true
+      lock.broadcast()
       let currentHandle = fileHandle
       fileHandle = nil
       eventSink = nil
@@ -1303,9 +1338,10 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
         return
       }
 
+      if !waitForReadCredit() { return }
       do {
         let currentChunkSize = remainingBytes.map { min(chunkSize, $0) } ?? chunkSize
-        let data = handle.readData(ofLength: currentChunkSize)
+        let data = try handle.read(upToCount: currentChunkSize) ?? Data()
         if !data.isEmpty {
           if let currentRemainingBytes = remainingBytes {
             remainingBytes = currentRemainingBytes - data.count
@@ -1313,6 +1349,9 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
           emitChunk(data)
           continue
         }
+      } catch {
+        if !withLock({ isCancelled }) { emitError(error) }
+        return
       }
 
       emitEndOfStream()
@@ -1324,7 +1363,8 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
     guard let sink = withLock({ isCancelled ? nil : eventSink }) else {
       return
     }
-    DispatchQueue.main.async {
+    DispatchQueue.main.async { [weak self] in
+      guard let self, !self.withLock({ self.isCancelled }) else { return }
       sink(FlutterStandardTypedData(bytes: data))
     }
   }

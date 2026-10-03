@@ -64,6 +64,12 @@ semantics below unless a future changelog calls out a breaking change.
   large files or untrusted file sizes. `maxBytes`, when provided, must not be
   negative.
 - `cancel()` is idempotent. Consumers may call it after stream completion.
+- Paused consumers stop further file reads. Desktop streams may retain one
+  in-flight chunk; native streams acknowledge each delivered chunk before the
+  producer reads another. Cancellation releases resources without waiting for a
+  paused consumer to resume, and waits for any pending desktop file operation.
+- Desktop reading accepts local paths and `file:` URIs and uses asynchronous
+  file operations with the same range validation as native reading.
 - Native read file handles are released after EOF or read-open failures.
   Native event-channel registrations remain available until Flutter
   deactivates the stream.
@@ -127,6 +133,8 @@ semantics below unless a future changelog calls out a breaking change.
   write session opens, and append mode leaves the file contents unchanged.
 - Write session `cancel()` is idempotent. It releases native write resources but
   does not guarantee rollback of chunks that were already written.
+- Cancellation waits for an active chunk or finish operation before releasing
+  write resources. A successful pending finish already closes the session.
 - A closed write session rejects additional chunks. A cancelled write session
   rejects additional chunks and cannot be closed.
 - If the target does not exist, is a directory, or cannot be accessed, native

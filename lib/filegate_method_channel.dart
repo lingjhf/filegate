@@ -9,6 +9,7 @@ import 'src/errors.dart';
 import 'src/file_read_session.dart';
 import 'src/file_write_session.dart';
 import 'src/models.dart';
+import 'src/read_arguments.dart';
 
 /// An implementation of [FilegatePlatform] that uses method channels.
 class MethodChannelFilegate extends FilegatePlatform {
@@ -261,29 +262,12 @@ class MethodChannelFilegate extends FilegatePlatform {
     int start = 0,
     int? end,
   }) {
-    if (path.isEmpty) {
-      throw ArgumentError.value(path, 'path', 'path must not be empty');
-    }
-    if (chunkSize <= 0) {
-      throw ArgumentError.value(
-        chunkSize,
-        'chunkSize',
-        'chunkSize must be greater than zero',
-      );
-    }
-    if (start < 0) {
-      throw ArgumentError.value(start, 'start', 'start must not be negative');
-    }
-    if (end != null && end < start) {
-      throw ArgumentError.value(
-        end,
-        'end',
-        'end must be greater than or equal to start',
-      );
-    }
+    validateReadArguments(path, chunkSize: chunkSize, start: start, end: end);
 
     if (!forceNativeRead &&
-        (Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
+        (_operatingSystem == 'macos' ||
+            _operatingSystem == 'windows' ||
+            _operatingSystem == 'linux')) {
       return _openDesktopRead(
         path,
         chunkSize: chunkSize,
@@ -299,9 +283,40 @@ class MethodChannelFilegate extends FilegatePlatform {
     bool closed = false;
     Future<void>? cancelFuture;
     Future<void>? nativeCancelFuture;
+    bool awaitingAcknowledgement = false;
 
     late final StreamController<Uint8List> controller;
     late final Future<void> Function() cancelOnce;
+    void acknowledgeChunk() {
+      if (!awaitingAcknowledgement ||
+          controller.isPaused ||
+          cancelled ||
+          closed) {
+        return;
+      }
+      awaitingAcknowledgement = false;
+      unawaited(() async {
+        try {
+          await methodChannel.invokeMethod<void>('ackRead', {
+            'streamId': streamId,
+          });
+        } catch (error, stackTrace) {
+          if (!cancelled && !closed) {
+            controller.addError(error, stackTrace);
+            await cancelOnce();
+          }
+        }
+      }());
+    }
+
+    void addChunk(Uint8List chunk) {
+      if (cancelled || closed) return;
+      controller.add(chunk);
+      awaitingAcknowledgement = true;
+      // Let delivery (and async consumers pausing the stream) run first.
+      scheduleMicrotask(acknowledgeChunk);
+    }
+
     Future<void> cancelStartedRead() async {
       final activeStreamId = streamId;
       if (activeStreamId != null && activeStreamId.isNotEmpty) {
@@ -334,6 +349,7 @@ class MethodChannelFilegate extends FilegatePlatform {
             'chunkSize': chunkSize,
             'start': start,
             'end': end,
+            'flowControlled': true,
           });
           streamId = await startReadFuture;
 
@@ -353,16 +369,22 @@ class MethodChannelFilegate extends FilegatePlatform {
               .receiveBroadcastStream()
               .listen(
                 (event) {
+                  if (cancelled || closed) return;
                   if (event is Uint8List) {
-                    controller.add(event);
+                    addChunk(event);
                     return;
                   }
                   if (event is ByteData) {
-                    controller.add(event.buffer.asUint8List());
+                    addChunk(
+                      event.buffer.asUint8List(
+                        event.offsetInBytes,
+                        event.lengthInBytes,
+                      ),
+                    );
                     return;
                   }
                   if (event is List && event.every((item) => item is int)) {
-                    controller.add(Uint8List.fromList(event.cast<int>()));
+                    addChunk(Uint8List.fromList(event.cast<int>()));
                     return;
                   }
 
@@ -376,6 +398,7 @@ class MethodChannelFilegate extends FilegatePlatform {
                   unawaited(cancelOnce());
                 },
                 onError: (Object error, StackTrace stackTrace) {
+                  if (cancelled || closed) return;
                   controller.addError(error, stackTrace);
                   unawaited(cancelOnce());
                 },
@@ -387,6 +410,7 @@ class MethodChannelFilegate extends FilegatePlatform {
                   );
                 },
               );
+          if (controller.isPaused) subscription?.pause();
         } catch (error, stackTrace) {
           if (!cancelled) {
             controller.addError(error, stackTrace);
@@ -399,26 +423,25 @@ class MethodChannelFilegate extends FilegatePlatform {
         }
       },
       onPause: () => subscription?.pause(),
-      onResume: () => subscription?.resume(),
+      onResume: () {
+        subscription?.resume();
+        scheduleMicrotask(acknowledgeChunk);
+      },
       onCancel: () => cancelOnce(),
     );
 
     cancelOnce = () {
       return cancelFuture ??= () async {
         cancelled = true;
-        final hasStartedStream = subscription != null || streamId != null;
         await _cancelEventSubscription(subscription);
         await cancelStartedRead();
-        final closeFuture = _closeController(
-          controller,
-          alreadyClosed: () => closed,
-          onClose: () => closed = true,
+        unawaited(
+          _closeController(
+            controller,
+            alreadyClosed: () => closed,
+            onClose: () => closed = true,
+          ),
         );
-        if (hasStartedStream) {
-          await closeFuture;
-        } else {
-          unawaited(closeFuture);
-        }
       }();
     };
 
@@ -434,21 +457,40 @@ class MethodChannelFilegate extends FilegatePlatform {
     required int start,
     required int? end,
   }) {
-    final controller = StreamController<Uint8List>();
     RandomAccessFile? file;
     bool cancelled = false;
     bool closed = false;
+    Future<void>? readFuture;
     Future<void>? cancelFuture;
+    Completer<void>? resume;
+    late final StreamController<Uint8List> controller;
 
-    Future<void> closeController() async {
+    void closeController() {
       if (closed) return;
       closed = true;
-      await controller.close();
+      // Completion can wait for a paused listener. Cleanup must not wait for it.
+      unawaited(controller.close());
     }
 
-    controller.onListen = () async {
+    Future<void> read() async {
+      var opened = false;
       try {
-        final type = FileSystemEntity.typeSync(path);
+        final localPath = path.toLowerCase().startsWith('file:')
+            ? PickedEntry(
+                path: path,
+                name: path,
+                kind: PickedEntryKind.file,
+              ).fileSystemPath
+            : path;
+        if (localPath == null) {
+          throw PlatformException(
+            code: FilegateErrorCode.unsupportedMode,
+            message: 'The provided identifier is not a local file path.',
+            details: path,
+          );
+        }
+        final type = await FileSystemEntity.type(localPath);
+        if (cancelled) return;
         if (type == FileSystemEntityType.notFound) {
           throw PlatformException(
             code: FilegateErrorCode.pathNotFound,
@@ -464,49 +506,85 @@ class MethodChannelFilegate extends FilegatePlatform {
           );
         }
 
-        file = await File(path).open();
-        final length = await file!.length();
+        final handle = await File(localPath).open();
+        file = handle;
+        opened = true;
+        if (cancelled) return;
+        final length = await handle.length();
         final endOffset = end == null || end > length ? length : end;
-        if (start >= endOffset) {
-          await closeController();
-          return;
-        }
+        if (cancelled || start >= endOffset) return;
 
         var offset = start;
-        await file!.setPosition(offset);
+        await handle.setPosition(offset);
         while (!cancelled && offset < endOffset) {
+          while (!cancelled && controller.isPaused) {
+            await (resume ??= Completer<void>()).future;
+          }
+          if (cancelled) break;
           final remainingBytes = endOffset - offset;
           final currentChunkSize = remainingBytes < chunkSize
               ? remainingBytes
               : chunkSize;
-          final chunk = await file!.read(currentChunkSize);
-          if (chunk.isEmpty) break;
+          final chunk = await handle.read(currentChunkSize);
+          if (cancelled || chunk.isEmpty) break;
           offset += chunk.length;
-          if (!cancelled) {
-            controller.add(Uint8List.fromList(chunk));
-          }
+          controller.add(chunk);
         }
       } catch (error, stackTrace) {
         if (!cancelled) {
-          controller.addError(error, stackTrace);
+          Object mapped = error;
+          if (error is FileSystemException) {
+            final osCode = error.osError?.errorCode;
+            final missing = osCode == 2 || (Platform.isWindows && osCode == 3);
+            final denied = Platform.isWindows
+                ? osCode == 5
+                : osCode == 1 || osCode == 13;
+            mapped = PlatformException(
+              code: missing
+                  ? FilegateErrorCode.pathNotFound
+                  : denied
+                  ? FilegateErrorCode.permissionDenied
+                  : opened
+                  ? FilegateErrorCode.readFailed
+                  : FilegateErrorCode.readOpenFailed,
+              message: error.message,
+              details: path,
+            );
+          }
+          controller.addError(mapped, stackTrace);
         }
       } finally {
-        await file?.close();
+        try {
+          await file?.close();
+        } catch (error, stackTrace) {
+          if (!cancelled) controller.addError(error, stackTrace);
+        }
         file = null;
-        await closeController();
+        closeController();
       }
-    };
+    }
 
     Future<void> cancelOnce() {
       return cancelFuture ??= () async {
         cancelled = true;
-        await file?.close();
-        file = null;
-        await closeController();
+        resume?.complete();
+        resume = null;
+        // The producer owns the handle, including pending open/read operations.
+        await readFuture;
+        closeController();
       }();
     }
 
-    controller.onCancel = cancelOnce;
+    controller = StreamController<Uint8List>(
+      onListen: () {
+        if (!cancelled) readFuture = read();
+      },
+      onResume: () {
+        resume?.complete();
+        resume = null;
+      },
+      onCancel: cancelOnce,
+    );
     return FileReadSession<Uint8List>(
       stream: controller.stream,
       onCancel: cancelOnce,

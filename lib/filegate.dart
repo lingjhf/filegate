@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 
 export 'src/errors.dart';
 export 'src/file_read_session.dart';
@@ -13,6 +14,8 @@ import 'src/errors.dart';
 import 'src/file_read_session.dart';
 import 'src/file_write_session.dart';
 import 'src/models.dart';
+import 'src/extensions.dart';
+import 'src/read_arguments.dart';
 
 class Filegate {
   const Filegate();
@@ -304,12 +307,7 @@ class Filegate {
     int start = 0,
     int? end,
   }) {
-    _validateOpenReadArguments(
-      path,
-      chunkSize: chunkSize,
-      start: start,
-      end: end,
-    );
+    validateReadArguments(path, chunkSize: chunkSize, start: start, end: end);
     return FilegatePlatform.instance.openRead(
       path,
       chunkSize: chunkSize,
@@ -419,7 +417,7 @@ class Filegate {
       );
     }
 
-    final type = FileSystemEntity.typeSync(directoryPath);
+    final type = await FileSystemEntity.type(directoryPath);
     if (type == FileSystemEntityType.notFound) {
       throw PlatformException(
         code: FilegateErrorCode.pathNotFound,
@@ -435,7 +433,7 @@ class Filegate {
       );
     }
 
-    final normalizedExtensions = _normalizeAllowedExtensions(allowedExtensions);
+    final normalizedExtensions = normalizeExtensions(allowedExtensions);
     final root = Directory(directoryPath);
     final entries = <PickedEntry>[];
 
@@ -477,34 +475,6 @@ class Filegate {
       (left, right) => left.relativePath!.compareTo(right.relativePath!),
     );
     return entries;
-  }
-}
-
-void _validateOpenReadArguments(
-  String path, {
-  required int chunkSize,
-  required int start,
-  required int? end,
-}) {
-  if (path.isEmpty) {
-    throw ArgumentError.value(path, 'path', 'path must not be empty');
-  }
-  if (chunkSize <= 0) {
-    throw ArgumentError.value(
-      chunkSize,
-      'chunkSize',
-      'chunkSize must be greater than zero',
-    );
-  }
-  if (start < 0) {
-    throw ArgumentError.value(start, 'start', 'start must not be negative');
-  }
-  if (end != null && end < start) {
-    throw ArgumentError.value(
-      end,
-      'end',
-      'end must be greater than or equal to start',
-    );
   }
 }
 
@@ -617,18 +587,7 @@ int? _rangeTotalBytes(int? fileSize, int start, int? end) {
   return effectiveEnd - start;
 }
 
-List<String> _normalizeAllowedExtensions(List<String> extensions) {
-  return extensions
-      .map(
-        (extension) =>
-            extension.startsWith('.') ? extension.substring(1) : extension,
-      )
-      .map((extension) => extension.toLowerCase())
-      .where((extension) => extension.isNotEmpty)
-      .toList(growable: false);
-}
-
-bool _matchesAllowedExtensions(String path, List<String> allowedExtensions) {
+bool _matchesAllowedExtensions(String path, Set<String> allowedExtensions) {
   if (allowedExtensions.isEmpty) {
     return true;
   }
@@ -636,28 +595,14 @@ bool _matchesAllowedExtensions(String path, List<String> allowedExtensions) {
   return extension != null && allowedExtensions.contains(extension);
 }
 
-String _basename(String path) {
-  final normalized = path.replaceAll(r'\', '/');
-  return normalized.split('/').where((part) => part.isNotEmpty).last;
-}
+String _basename(String path) => p.basename(path);
 
-String _relativePath(String rootPath, String childPath) {
-  final root = rootPath.replaceAll(r'\', '/').replaceFirst(RegExp(r'/+$'), '');
-  final child = childPath.replaceAll(r'\', '/');
-  final prefix = '$root/';
-  if (child.startsWith(prefix)) {
-    return child.substring(prefix.length);
-  }
-  return _basename(childPath);
-}
+String _relativePath(String rootPath, String childPath) =>
+    p.posix.joinAll(p.split(p.relative(childPath, from: rootPath)));
 
 String? _extension(String path) {
-  final name = _basename(path);
-  final dotIndex = name.lastIndexOf('.');
-  if (dotIndex <= 0 || dotIndex == name.length - 1) {
-    return null;
-  }
-  return name.substring(dotIndex + 1).toLowerCase();
+  final extension = p.extension(path).toLowerCase();
+  return extension.length > 1 ? extension.substring(1) : null;
 }
 
 const _imageGalleryExtensions = <String>{
