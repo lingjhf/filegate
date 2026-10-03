@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show internal;
+
+import 'file_arguments.dart';
 import 'models.dart';
 
 class FileWriteSession {
@@ -17,6 +20,7 @@ class FileWriteSession {
   final Future<void> Function() _onCancel;
   final int? _totalBytes;
   final FilegateWriteProgressCallback? _onProgress;
+  final _progressListeners = <void Function(int)>[];
 
   Future<void> _tail = Future<void>.value();
   bool _closeRequested = false;
@@ -25,6 +29,19 @@ class FileWriteSession {
   int _bytesWritten = 0;
   Future<PickedEntry>? _closeFuture;
   Future<void>? _cancelFuture;
+
+  @internal
+  void addProgressListener(
+    FilegateWriteProgressCallback listener, {
+    int? totalBytes,
+  }) {
+    validateWriteProgressTotalBytes(totalBytes);
+    _progressListeners.add((bytesWritten) {
+      listener(
+        FileWriteProgress(bytesWritten: bytesWritten, totalBytes: totalBytes),
+      );
+    });
+  }
 
   Future<void> add(List<int> chunk) {
     if (_closeRequested) {
@@ -50,6 +67,9 @@ class FileWriteSession {
             totalBytes: _totalBytes,
           ),
         );
+        for (final listener in _progressListeners) {
+          listener(_bytesWritten);
+        }
       });
     });
   }

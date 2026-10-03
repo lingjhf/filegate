@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'extensions.dart';
+import 'file_location.dart';
 
 enum FilegateSelectionMode { filesOnly, directoriesOnly, filesAndDirectories }
 
@@ -388,9 +389,9 @@ class PickedEntry {
 
   bool get isContentUri => locationKind == FilegateLocationKind.contentUri;
 
-  Uri? get uri => _uriFor(path);
+  Uri? get uri => uriForIdentifier(path);
 
-  String? get fileSystemPath => _fileSystemPathFor(path);
+  String? get fileSystemPath => fileSystemPathForIdentifier(path);
 
   int? get size => metadata.size;
 
@@ -437,11 +438,8 @@ class PickedEntry {
   }
 }
 
-final _windowsDrivePathPattern = RegExp(r'^[A-Za-z]:(?:[\\/]|[^\\/].*)');
-final _windowsFileUriPathPattern = RegExp(r'^/[A-Za-z]:(?:/|$)');
-
 FilegateLocationKind _locationKindFor(String identifier) {
-  final uri = _uriFor(identifier);
+  final uri = uriForIdentifier(identifier);
   if (uri == null) {
     return FilegateLocationKind.platformPath;
   }
@@ -451,39 +449,6 @@ FilegateLocationKind _locationKindFor(String identifier) {
     'content' => FilegateLocationKind.contentUri,
     _ => FilegateLocationKind.otherUri,
   };
-}
-
-Uri? _uriFor(String identifier) {
-  if (identifier.isEmpty || _windowsDrivePathPattern.hasMatch(identifier)) {
-    return null;
-  }
-
-  final uri = Uri.tryParse(identifier);
-  if (uri == null || uri.scheme.isEmpty) {
-    return null;
-  }
-  return uri;
-}
-
-String? _fileSystemPathFor(String identifier) {
-  final uri = _uriFor(identifier);
-  if (uri == null) {
-    return identifier;
-  }
-  if (uri.scheme.toLowerCase() != 'file') {
-    return null;
-  }
-
-  try {
-    return uri.toFilePath(windows: _shouldDecodeAsWindowsFileUri(uri));
-  } on Object {
-    return null;
-  }
-}
-
-bool _shouldDecodeAsWindowsFileUri(Uri uri) {
-  return _windowsFileUriPathPattern.hasMatch(uri.path) ||
-      (uri.host.isNotEmpty && uri.host.toLowerCase() != 'localhost');
 }
 
 DateTime? _decodeModifiedAt(Object? value, Map<Object?, Object?> source) {

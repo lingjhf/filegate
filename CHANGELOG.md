@@ -11,6 +11,10 @@
 - Share extension normalization across picking, saving, and directory listing;
   use asynchronous directory validation and standard relative path handling.
 - Keep native macOS read channels registered until Flutter cancels them at EOF.
+- Isolate desktop and native read lifecycles in dedicated readers; share location
+  resolution and file argument validation across API and platform layers.
+- Report write progress on the original session, avoiding an extra queue and
+  chunk copy while preserving snapshot, callback, and cancellation behavior.
 
 ## 1.10.0 - 2026-10-02
 

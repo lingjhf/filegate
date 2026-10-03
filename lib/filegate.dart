@@ -11,10 +11,11 @@ export 'src/models.dart';
 
 import 'filegate_platform_interface.dart';
 import 'src/errors.dart';
+import 'src/extensions.dart';
+import 'src/file_arguments.dart';
 import 'src/file_read_session.dart';
 import 'src/file_write_session.dart';
 import 'src/models.dart';
-import 'src/extensions.dart';
 import 'src/read_arguments.dart';
 
 class Filegate {
@@ -33,7 +34,7 @@ class Filegate {
   }
 
   Future<PickedEntry?> save(FilegateSaveOptions options) {
-    _validateSaveOptions(options);
+    validateFileName(options.suggestedName, argumentName: 'suggestedName');
     return FilegatePlatform.instance.save(options);
   }
 
@@ -54,7 +55,7 @@ class Filegate {
   }
 
   Future<PickedEntry> write(FilegateWriteOptions options) {
-    _validateWriteOptions(options);
+    validateNonEmptyPath(options.path);
     return FilegatePlatform.instance.write(options);
   }
 
@@ -72,19 +73,14 @@ class Filegate {
     int? totalBytes,
     FilegateWriteProgressCallback? onProgress,
   }) async {
-    _validateWritePath(path);
-    _validateWriteProgressTotalBytes(totalBytes);
+    validateNonEmptyPath(path);
+    validateWriteProgressTotalBytes(totalBytes);
     final session = await FilegatePlatform.instance.openWrite(path, mode: mode);
     if (onProgress == null) {
       return session;
     }
-    return FileWriteSession(
-      onAdd: session.add,
-      onClose: session.close,
-      onCancel: session.cancel,
-      totalBytes: totalBytes,
-      onProgress: onProgress,
-    );
+    session.addProgressListener(onProgress, totalBytes: totalBytes);
+    return session;
   }
 
   Future<PickedEntry> writeStream(
@@ -409,13 +405,7 @@ class Filegate {
     bool recursive = false,
     List<String> allowedExtensions = const [],
   }) async {
-    if (directoryPath.isEmpty) {
-      throw ArgumentError.value(
-        directoryPath,
-        'directoryPath',
-        'directoryPath must not be empty',
-      );
-    }
+    validateNonEmptyPath(directoryPath, argumentName: 'directoryPath');
 
     final type = await FileSystemEntity.type(directoryPath);
     if (type == FileSystemEntityType.notFound) {
@@ -478,24 +468,6 @@ class Filegate {
   }
 }
 
-void _validateSaveOptions(FilegateSaveOptions options) {
-  if (options.suggestedName.trim().isEmpty) {
-    throw ArgumentError.value(
-      options.suggestedName,
-      'suggestedName',
-      'suggestedName must not be empty',
-    );
-  }
-  if (options.suggestedName.contains('/') ||
-      options.suggestedName.contains(r'\')) {
-    throw ArgumentError.value(
-      options.suggestedName,
-      'suggestedName',
-      'suggestedName must be a file name, not a path',
-    );
-  }
-}
-
 void _validateGallerySaveOptions(FilegateGallerySaveOptions options) {
   if (options.bytes.isEmpty) {
     throw ArgumentError.value(
@@ -504,20 +476,7 @@ void _validateGallerySaveOptions(FilegateGallerySaveOptions options) {
       'bytes must not be empty',
     );
   }
-  if (options.fileName.trim().isEmpty) {
-    throw ArgumentError.value(
-      options.fileName,
-      'fileName',
-      'fileName must not be empty',
-    );
-  }
-  if (options.fileName.contains('/') || options.fileName.contains(r'\')) {
-    throw ArgumentError.value(
-      options.fileName,
-      'fileName',
-      'fileName must be a file name, not a path',
-    );
-  }
+  validateFileName(options.fileName, argumentName: 'fileName');
 }
 
 FilegateGalleryMediaType _galleryMediaTypeFor(
@@ -554,26 +513,6 @@ FilegateGalleryMediaType _galleryMediaTypeFor(
     message: 'Only image and video files can be saved to the system gallery.',
     details: mimeType ?? fileName,
   );
-}
-
-void _validateWriteOptions(FilegateWriteOptions options) {
-  _validateWritePath(options.path);
-}
-
-void _validateWritePath(String path) {
-  if (path.isEmpty) {
-    throw ArgumentError.value(path, 'path', 'path must not be empty');
-  }
-}
-
-void _validateWriteProgressTotalBytes(int? totalBytes) {
-  if (totalBytes != null && totalBytes < 0) {
-    throw ArgumentError.value(
-      totalBytes,
-      'totalBytes',
-      'totalBytes must not be negative',
-    );
-  }
 }
 
 int? _rangeTotalBytes(int? fileSize, int start, int? end) {

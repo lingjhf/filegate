@@ -1,12 +1,12 @@
+import 'file_arguments.dart';
+
 void validateReadArguments(
   String path, {
   required int chunkSize,
   required int start,
   required int? end,
 }) {
-  if (path.isEmpty) {
-    throw ArgumentError.value(path, 'path', 'path must not be empty');
-  }
+  validateNonEmptyPath(path);
   if (chunkSize <= 0) {
     throw ArgumentError.value(
       chunkSize,

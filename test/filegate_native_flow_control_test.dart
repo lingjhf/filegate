@@ -109,4 +109,68 @@ void main() {
       expect(bytes, [1, 2, 3]);
     },
   );
+
+  test(
+    'pausing and cancelling one reader leaves another reader independent',
+    () async {
+      final positions = <String, int>{'first': 0, 'second': 0};
+      void emitFor(String id) {
+        final position = positions[id]!;
+        positions[id] = position + 1;
+        messenger.handlePlatformMessage(
+          'filegate/read/$id',
+          position < 3
+              ? codec.encodeSuccessEnvelope(Uint8List.fromList([position + 1]))
+              : null,
+          (_) {},
+        );
+      }
+
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        final arguments = call.arguments as Map;
+        if (call.method == 'startRead') return arguments['path'];
+        if (call.method == 'ackRead') emitFor(arguments['streamId'] as String);
+        return null;
+      });
+      for (final id in positions.keys) {
+        final eventName = 'filegate/read/$id';
+        messenger.setMockMessageHandler(eventName, (message) async {
+          if (codec.decodeMethodCall(message).method == 'listen') emitFor(id);
+          return codec.encodeSuccessEnvelope(null);
+        });
+        addTearDown(() => messenger.setMockMessageHandler(eventName, null));
+      }
+
+      final platform = MethodChannelFilegate(forceNativeRead: true);
+      final first = platform.openRead('first');
+      final receivedFirst = Completer<void>();
+      late StreamSubscription<Uint8List> firstSubscription;
+      firstSubscription = first.stream.listen((_) {
+        firstSubscription.pause();
+        receivedFirst.complete();
+      });
+      await receivedFirst.future;
+      final second = platform.openRead('second');
+      final secondChunks = await second.stream.toList();
+      await second.cancel();
+      expect(secondChunks.expand((chunk) => chunk), [1, 2, 3]);
+      expect(positions['first'], 1);
+      expect(
+        calls
+            .where((call) => call.method == 'ackRead')
+            .map((call) => (call.arguments as Map)['streamId']),
+        ['second', 'second', 'second'],
+      );
+
+      await first.cancel().timeout(const Duration(seconds: 1));
+      await firstSubscription.cancel();
+      expect(
+        calls
+            .where((call) => call.method == 'cancelRead')
+            .map((call) => (call.arguments as Map)['streamId']),
+        unorderedEquals(['first', 'second']),
+      );
+    },
+  );
 }

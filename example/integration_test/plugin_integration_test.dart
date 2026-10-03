@@ -303,15 +303,33 @@ void main() {
     );
 
     final openSessionBytes = Uint8List.fromList('open-session\n'.codeUnits);
-    final writeSession = await filegate.openWrite(file.path);
+    final writeProgress = <FileWriteProgress>[];
+    final writeSession = await filegate.openWrite(
+      file.path,
+      totalBytes: openSessionBytes.length,
+      onProgress: writeProgress.add,
+    );
     expect(await file.readAsBytes(), isEmpty);
-    await writeSession.add(openSessionBytes.sublist(0, 4));
+    final firstWriteChunk = openSessionBytes.sublist(0, 4);
+    final firstWrite = writeSession.add(firstWriteChunk);
+    firstWriteChunk.fillRange(0, firstWriteChunk.length, 0);
+    await firstWrite;
     await writeSession.add(openSessionBytes.sublist(4));
     final streamed = await writeSession.close();
     expect(streamed.name, 'sample.txt');
     expect(streamed.fileSystemPath, file.path);
     expect(streamed.size, openSessionBytes.length);
     expect((await file.readAsBytes()).toList(), openSessionBytes.toList());
+    expect(writeProgress.map((progress) => progress.bytesWritten), [
+      4,
+      openSessionBytes.length,
+    ]);
+    expect(
+      writeProgress.every(
+        (progress) => progress.totalBytes == openSessionBytes.length,
+      ),
+      isTrue,
+    );
 
     await expectLater(
       filegate.writeFile(
