@@ -4,14 +4,14 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'filegate'
-  s.version          = '0.0.1'
+  s.version          = '1.10.0'
   s.summary          = 'A native file chooser plugin with current-session iOS streaming support.'
   s.description      = <<-DESC
 A native file chooser plugin with current-session iOS streaming support.
                        DESC
   s.homepage         = 'http://example.com'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
+  s.author           = { 'lingjhf' => 'lingj.jhf@outlook.com' }
   s.source           = { :path => '.' }
   s.source_files = 'filegate/Sources/filegate/**/*'
   s.dependency 'Flutter'

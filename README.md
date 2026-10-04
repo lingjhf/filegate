@@ -463,3 +463,39 @@ available in `FilegateErrorCode`, including `invalid_args`,
 `picker_failed`, `save_failed`, `write_failed`, `stream_active`,
 `missing_stream_id`, `missing_write_session_id`, `write_session_not_found`,
 `invalid_chunk`, `read_open_failed`, `read_failed`, and `enumeration_failed`.
+
+## CI, branch protection, and releases
+
+The default branch is `main`. Changes go through pull requests with the required
+`CI passed` check, an up-to-date branch, and resolved review conversations. There
+are no required approving reviews for this single-maintainer repository. Force
+pushes and branch deletion are blocked, with no administrator bypass.
+
+CI separates shared format, analysis, package validation and version checks from
+Dart tests and native platform validation. Dart tests run on Flutter 3.44.0 (the
+Dart 3.12 minimum), pinned Flutter 3.47.5, and latest stable. Native jobs retain
+Android unit/emulator tests, iOS builds, macOS integration tests, and Windows/Linux
+native and integration tests. All actions are pinned; Dependabot checks them weekly.
+
+Update `pubspec.yaml`, both Apple podspecs, and `CHANGELOG.md` together. The changelog
+may retain an `Unreleased` section; the package version must also have a version
+heading, optionally followed by a release date. Version checks reject inconsistent
+metadata, invalid semantic versions, and mismatched tags.
+
+Only repository administrators may create `v*` tags; existing tags cannot be
+modified or deleted. After merging and passing CI, tag the desired main commit as
+`v<version>`. Tag CI verifies main ancestry and creates a GitHub Release after all
+checks succeed. Prerelease versions create prereleases.
+
+pub.dev publication is a separate manual workflow using the existing Dart OIDC
+publisher integration. Dispatch `publish.yml` **at the release tag**, with the same
+tag input, after its CI and GitHub Release succeed:
+
+```sh
+gh workflow run publish.yml --ref v<version> -f tag=v<version>
+```
+
+The workflow checks the exact tag, main ancestry, successful tag CI, and GitHub
+Release before publishing. Its GitHub Actions OIDC publisher must be configured on
+pub.dev for this repository and workflow. Adding these workflows does not create
+a version tag or publish a package.
