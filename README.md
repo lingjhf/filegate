@@ -484,18 +484,23 @@ metadata, invalid semantic versions, and mismatched tags.
 
 Only repository administrators may create `v*` tags; existing tags cannot be
 modified or deleted. After merging and passing CI, tag the desired main commit as
-`v<version>`. Tag CI verifies main ancestry and creates a GitHub Release after all
-checks succeed. Prerelease versions create prereleases.
+`v<version>`. Tag CI verifies main ancestry, publishes to pub.dev after all checks succeed,
+and then creates a GitHub Release. Prerelease versions create prereleases.
 
-pub.dev publication is a separate manual workflow using the existing Dart OIDC
-publisher integration. Dispatch `publish.yml` **at the release tag**, with the same
-tag input, after its CI and GitHub Release succeed:
 
-```sh
-gh workflow run publish.yml --ref v<version> -f tag=v<version>
-```
+### Automatic publication
 
-The workflow checks the exact tag, main ancestry, successful tag CI, and GitHub
-Release before publishing. Its GitHub Actions OIDC publisher must be configured on
-pub.dev for this repository and workflow. Adding these workflows does not create
-a version tag or publish a package.
+Push a new `v<version>` tag to run the complete CI, validate its package version
+and main ancestry, publish to pub.dev, and finally create its GitHub Release.
+Publishing is restricted to tag **push** events; manual CI dispatches do not publish.
+Enable GitHub Actions automated publishing on pub.dev with repository `lingjhf/filegate`
+and tag pattern `v{{version}}`, allowing push events. These settings have been
+verified for this package. Temporary OIDC credentials are provisioned immediately
+before upload; no long-lived publishing secret is stored in GitHub.
+
+On retries, the publication job checks the exact version on pub.dev. If it exists,
+it verifies the archive checksum and compares published files with this commit,
+including all tracked Dart/native source files. Matching content skips upload;
+different content or registry errors fail the job and block GitHub Release creation.
+Do not move existing tags; fix changed package contents with a new version and tag.
+This workflow change does not create a new package version or tag.
