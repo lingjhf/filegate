@@ -4,14 +4,14 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'filegate'
-  s.version          = '0.0.1'
+  s.version          = '1.10.0'
   s.summary          = 'A macOS 12+ file chooser plugin with native file streaming.'
   s.description      = <<-DESC
 A macOS 12+ file chooser plugin with native file streaming.
                        DESC
   s.homepage         = 'http://example.com'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
+  s.author           = { 'lingjhf' => 'lingj.jhf@outlook.com' }
 
   s.source           = { :path => '.' }
   s.source_files = 'filegate/Sources/filegate/**/*'

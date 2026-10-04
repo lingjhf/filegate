@@ -1,3 +1,4 @@
+import Darwin
 import Flutter
 import MobileCoreServices
 import Photos
@@ -1341,7 +1342,25 @@ private final class FileReadStreamHandler: NSObject, FlutterStreamHandler {
       if !waitForReadCredit() { return }
       do {
         let currentChunkSize = remainingBytes.map { min(chunkSize, $0) } ?? chunkSize
-        let data = try handle.read(upToCount: currentChunkSize) ?? Data()
+        let data: Data
+        if #available(iOS 13.4, *) {
+          data = try handle.read(upToCount: currentChunkSize) ?? Data()
+        } else {
+          // Foundation's throwing read API requires iOS 13.4. Preserve iOS 13
+          // support with a bounded POSIX read and the same Swift error path.
+          var buffer = Data(count: currentChunkSize)
+          var count: Int
+          repeat {
+            count = buffer.withUnsafeMutableBytes {
+              Darwin.read(handle.fileDescriptor, $0.baseAddress, $0.count)
+            }
+          } while count < 0 && errno == EINTR
+          if count < 0 {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+          }
+          buffer.count = count
+          data = buffer
+        }
         if !data.isEmpty {
           if let currentRemainingBytes = remainingBytes {
             remainingBytes = currentRemainingBytes - data.count
